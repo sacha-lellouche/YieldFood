@@ -234,5 +234,6 @@ export default function RecipesPage() {
           </Card>
         </div>
       </div>
-    )
-  }
+    </div>
+  )
+}

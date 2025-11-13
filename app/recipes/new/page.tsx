@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Header from '@/components/Header'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -148,7 +147,6 @@ export default function NewRecipePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header />
       <main className="container mx-auto px-4 py-8">
         <div className="mb-6">
           <Link

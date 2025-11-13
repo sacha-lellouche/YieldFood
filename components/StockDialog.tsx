@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Ingredient } from '@/types/ingredient'
-import { Product } from '@/types/stock'
+import { StockWithProduct, Product } from '@/types/stock'
 import {
   Dialog,
   DialogContent,
@@ -22,40 +21,33 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-interface IngredientDialogProps {
+interface StockDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  ingredient: Ingredient | null
+  stock: StockWithProduct | null
   onClose: (success?: boolean) => void
 }
 
-const UNITS = ['kg', 'g', 'L', 'mL', 'pièce', 'unité', 'boîte', 'sachet', 'paquet']
-
-export function IngredientDialog({
+export function StockDialog({
   open,
   onOpenChange,
-  ingredient,
+  stock,
   onClose,
-}: IngredientDialogProps) {
-  const [mode, setMode] = useState<'select' | 'manual'>('select')
+}: StockDialogProps) {
   const [products, setProducts] = useState<Product[]>([])
   const [loadingProducts, setLoadingProducts] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<string>('')
   const [productSearchTerm, setProductSearchTerm] = useState('')
-  
-  // Pour mode manuel
-  const [name, setName] = useState('')
   const [quantity, setQuantity] = useState('')
-  const [unit, setUnit] = useState('kg')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  // Charger les produits disponibles au démarrage
+  // Charger les produits disponibles
   useEffect(() => {
-    if (open && !ingredient) {
+    if (open && !stock) {
       fetchProducts()
     }
-  }, [open, ingredient])
+  }, [open, stock])
 
   // Filtrer les produits selon le terme de recherche
   const filteredProducts = products.filter(product =>
@@ -63,21 +55,16 @@ export function IngredientDialog({
   )
 
   useEffect(() => {
-    if (ingredient) {
-      setMode('manual')
-      setName(ingredient.name)
-      setQuantity(ingredient.quantity.toString())
-      setUnit(ingredient.unit)
+    if (stock) {
+      setSelectedProductId(stock.product_id)
+      setQuantity(stock.quantity.toString())
     } else {
-      setMode('select')
-      setName('')
-      setQuantity('')
-      setUnit('kg')
       setSelectedProductId('')
+      setQuantity('')
       setProductSearchTerm('')
     }
     setError('')
-  }, [ingredient, open])
+  }, [stock, open])
 
   const fetchProducts = async () => {
     setLoadingProducts(true)
@@ -94,28 +81,12 @@ export function IngredientDialog({
     }
   }
 
-  // Quand un produit est sélectionné, pré-remplir les infos
-  const handleProductSelect = (productId: string) => {
-    setSelectedProductId(productId)
-    const product = products.find(p => p.id === productId)
-    if (product) {
-      setName(product.name)
-      setUnit(product.unit)
-    }
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
-    // Validation
-    if (mode === 'select' && !selectedProductId) {
+    if (!selectedProductId) {
       setError('Veuillez sélectionner un produit')
-      return
-    }
-
-    if (mode === 'manual' && !name.trim()) {
-      setError('Le nom est requis')
       return
     }
 
@@ -125,63 +96,71 @@ export function IngredientDialog({
       return
     }
 
-    if (!unit) {
-      setError('L\'unité est requise')
-      return
-    }
-
     setLoading(true)
 
     try {
-      const url = ingredient
-        ? `/api/ingredients/${ingredient.id}`
-        : '/api/ingredients'
-      
-      const method = ingredient ? 'PUT' : 'POST'
+      if (stock) {
+        // Modification d'un stock existant - utiliser l'API d'ajustement
+        const deltaQuantity = quantityNum - stock.quantity
+        console.log('Adjusting stock:', { product_id: stock.product_id, deltaQuantity })
+        const response = await fetch(`/api/stock/${stock.product_id}/adjust`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ quantity: deltaQuantity }),
+        })
 
-      const body = mode === 'select' && selectedProductId
-        ? {
-            product_id: selectedProductId, // Utiliser le produit sélectionné
-            quantity: quantityNum,
-          }
-        : {
-            name: name.trim(),
-            quantity: quantityNum,
-            unit: unit.trim(),
-          }
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-      })
-
-      if (response.ok) {
-        onClose(true)
+        if (response.ok) {
+          onClose(true)
+        } else {
+          const data = await response.json()
+          setError(data.error || 'Une erreur est survenue')
+        }
       } else {
-        const data = await response.json()
-        setError(data.error || 'Une erreur est survenue')
+        // Création d'un nouveau stock
+        console.log('Creating stock:', { product_id: selectedProductId, quantity: quantityNum })
+        const response = await fetch('/api/stock', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            product_id: selectedProductId,
+            quantity: quantityNum,
+          }),
+        })
+
+        console.log('Response status:', response.status)
+        if (response.ok) {
+          onClose(true)
+        } else {
+          const data = await response.json()
+          console.error('Error response:', data)
+          setError(data.error || 'Une erreur est survenue')
+        }
       }
     } catch (err) {
+      console.error('Fetch error:', err)
       setError('Erreur de connexion')
     } finally {
       setLoading(false)
     }
   }
 
+  const selectedProduct = products.find(p => p.id === selectedProductId)
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {ingredient ? 'Modifier l\'ingrédient' : 'Ajouter un ingrédient'}
+            {stock ? 'Modifier le stock' : 'Ajouter un produit au stock'}
           </DialogTitle>
           <DialogDescription>
-            {ingredient
-              ? 'Modifiez les informations de votre ingrédient'
-              : 'Sélectionnez un produit du catalogue ou saisissez manuellement'}
+            {stock
+              ? 'Modifiez la quantité en stock'
+              : 'Sélectionnez un produit du catalogue'}
           </DialogDescription>
         </DialogHeader>
 
@@ -193,32 +172,8 @@ export function IngredientDialog({
               </div>
             )}
 
-            {/* Mode toggle - seulement pour nouvel ingrédient */}
-            {!ingredient && (
-              <div className="flex gap-2 p-1 bg-gray-100 rounded-lg">
-                <Button
-                  type="button"
-                  variant={mode === 'select' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setMode('select')}
-                  className="flex-1"
-                >
-                  📦 Catalogue
-                </Button>
-                <Button
-                  type="button"
-                  variant={mode === 'manual' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setMode('manual')}
-                  className="flex-1"
-                >
-                  ✏️ Manuel
-                </Button>
-              </div>
-            )}
-
-            {/* Mode: Sélection depuis le catalogue */}
-            {mode === 'select' && !ingredient && (
+            {/* Sélection du produit */}
+            {!stock && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="product">Produit</Label>
@@ -232,7 +187,7 @@ export function IngredientDialog({
                     />
                     <Select 
                       value={selectedProductId} 
-                      onValueChange={handleProductSelect}
+                      onValueChange={setSelectedProductId}
                       disabled={loading || loadingProducts}
                     >
                       <SelectTrigger id="product">
@@ -263,30 +218,31 @@ export function IngredientDialog({
                       </SelectContent>
                     </Select>
                   </div>
-                  {selectedProductId && (
+                  {selectedProductId && selectedProduct && (
                     <p className="text-xs text-gray-500">
-                      Unité: {products.find(p => p.id === selectedProductId)?.unit}
+                      Unité: {selectedProduct.unit}
+                      {selectedProduct.category && ` • Catégorie: ${selectedProduct.category}`}
                     </p>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Mode: Saisie manuelle */}
-            {(mode === 'manual' || ingredient) && (
-              <div className="space-y-2">
-                <Label htmlFor="name">Nom de l'ingrédient</Label>
-                <Input
-                  id="name"
-                  placeholder="Ex: Farine, Tomates, Huile d'olive..."
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  disabled={loading || (mode === 'select' && selectedProductId !== '')}
-                />
+            {/* Affichage du produit en mode édition */}
+            {stock && (
+              <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="text-sm font-medium">{stock.product.name}</div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Unité: {stock.product.unit}
+                  {stock.product.category && ` • ${stock.product.category}`}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Stock actuel: {stock.quantity} {stock.product.unit}
+                </div>
               </div>
             )}
 
-            {/* Quantité (toujours visible) */}
+            {/* Quantité */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="quantity">Quantité</Label>
@@ -302,33 +258,11 @@ export function IngredientDialog({
                 />
               </div>
 
-              {(mode === 'manual' || ingredient) && (
-                <div className="space-y-2">
-                  <Label htmlFor="unit">Unité</Label>
-                  <Select 
-                    value={unit} 
-                    onValueChange={setUnit} 
-                    disabled={loading || (mode === 'select' && selectedProductId !== '')}
-                  >
-                    <SelectTrigger id="unit">
-                      <SelectValue placeholder="Sélectionner" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {UNITS.map((u) => (
-                        <SelectItem key={u} value={u}>
-                          {u}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              {mode === 'select' && selectedProductId && !ingredient && (
+              {(selectedProductId || stock) && (
                 <div className="space-y-2">
                   <Label>Unité</Label>
-                  <div className="h-10 px-3 py-2 bg-gray-100 rounded-md flex items-center text-sm">
-                    {unit}
+                  <div className="h-10 px-3 py-2 bg-gray-100 rounded-md flex items-center text-sm font-medium">
+                    {stock ? stock.product.unit : selectedProduct?.unit}
                   </div>
                 </div>
               )}
@@ -349,7 +283,7 @@ export function IngredientDialog({
               className="bg-green-600 hover:bg-green-700"
               disabled={loading}
             >
-              {loading ? 'En cours...' : ingredient ? 'Modifier' : 'Ajouter'}
+              {loading ? 'En cours...' : stock ? 'Modifier' : 'Ajouter'}
             </Button>
           </DialogFooter>
         </form>

@@ -99,11 +99,68 @@ export async function POST(request: NextRequest) {
 
     // Récupérer et valider les données
     const body = await request.json()
-    const { name, quantity, unit } = body
+    const { product_id, name, quantity, unit } = body
 
+    // Cas 1: Création depuis le catalogue (avec product_id)
+    if (product_id) {
+      if (!quantity) {
+        return NextResponse.json(
+          { error: 'La quantité est requise' },
+          { status: 400 }
+        )
+      }
+
+      if (typeof quantity !== 'number' || quantity < 0) {
+        return NextResponse.json(
+          { error: 'La quantité doit être un nombre positif' },
+          { status: 400 }
+        )
+      }
+
+      // Récupérer les infos du produit
+      const { data: product, error: productError } = await supabase
+        .from('product')
+        .select('name, unit')
+        .eq('id', product_id)
+        .single()
+
+      if (productError || !product) {
+        return NextResponse.json(
+          { error: 'Produit non trouvé' },
+          { status: 404 }
+        )
+      }
+
+      // Insérer l'ingrédient avec les infos du produit
+      const { data, error } = await supabase
+        .from('ingredients')
+        .insert([
+          {
+            user_id: user.id,
+            product_id: product_id,
+            name: product.name,
+            quantity,
+            unit: product.unit,
+          },
+        ])
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error creating ingredient:', error)
+        return NextResponse.json(
+          { error: 'Erreur lors de la création de l\'ingrédient' },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json(data, { status: 201 })
+    }
+
+    // Cas 2: Création manuelle (avec name et unit)
     if (!name || !quantity || !unit) {
       return NextResponse.json(
-        { error: 'Tous les champs sont requis' },
+        { error: 'Tous les champs sont requis (nom, quantité, unité)' },
         { status: 400 }
       )
     }

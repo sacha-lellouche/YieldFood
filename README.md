@@ -1,76 +1,36 @@
-# YieldFood
-
-YieldFood is a web application designed to help restaurants automatically forecast their ingredient orders based on sales data. This project utilizes a modern tech stack, including FastAPI for the backend, Supabase for the database, and Next.js with TailwindCSS for the frontend.
-
-## Project Structure
-
-The project is organized into two main directories: `backend` and `frontend`.
-
-### Backend
-
-- **FastAPI**: The backend is built using FastAPI, providing a robust and efficient API for handling requests.
-- **Supabase**: The database is managed using Supabase, allowing for easy data storage and retrieval.
-- **Endpoints**:
-  - `GET /sales`: Retrieves sales data.
-  - `GET /forecast`: Calculates and retrieves forecast data based on sales.
-  - `POST /order/preview`: Generates a preview of the order based on the forecast.
-
-### Frontend
-
-- **Next.js**: The frontend is developed using Next.js, enabling server-side rendering and static site generation.
-- **TailwindCSS**: The application is styled using TailwindCSS, ensuring a responsive and modern design.
-- **Dashboard**: A simple dashboard page displays sales forecasts in a responsive table format.
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
-### Prerequisites
+First, run the development server:
 
-- Python 3.7+
-- Node.js 14+
-- Supabase account
+```bash
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
+```
 
-### Installation
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-1. Clone the repository:
-   ```
-   git clone <repository-url>
-   cd YieldFood
-   ```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-2. Set up the backend:
-   - Navigate to the `backend` directory.
-   - Install the required Python packages:
-     ```
-     pip install -r requirements.txt
-     ```
-   - Configure your environment variables in `.env` based on `.env.example`.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-3. Set up the frontend:
-   - Navigate to the `frontend` directory.
-   - Install the required Node.js packages:
-     ```
-     npm install
-     ```
-   - Configure your environment variables in `.env.local` based on `.env.local.example`.
+## Learn More
 
-### Running the Application
+To learn more about Next.js, take a look at the following resources:
 
-- Start the backend server:
-  ```
-  uvicorn app.main:app --reload
-  ```
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-- Start the frontend development server:
-  ```
-  npm run dev
-  ```
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-Visit `http://localhost:3000` to view the application.
+## Deploy on Vercel
 
-## Contributing
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

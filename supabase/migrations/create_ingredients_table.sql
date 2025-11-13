@@ -54,3 +54,4 @@ CREATE TRIGGER update_ingredients_updated_at
   BEFORE UPDATE ON ingredients
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+

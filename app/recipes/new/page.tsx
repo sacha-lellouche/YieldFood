@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Sparkles, Plus, Trash2, Save, ArrowLeft } from 'lucide-react'
+import { Sparkles, Plus, Trash2, Save, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 interface RecipeIngredient {
@@ -22,6 +22,8 @@ export default function NewRecipePage() {
   const [loading, setLoading] = useState(false)
   const [suggesting, setSuggesting] = useState(false)
   const [error, setError] = useState('')
+  const [autoSuggestEnabled, setAutoSuggestEnabled] = useState(true)
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Recipe form fields
   const [name, setName] = useState('')
@@ -34,6 +36,36 @@ export default function NewRecipePage() {
   const [ingredients, setIngredients] = useState<RecipeIngredient[]>([
     { ingredientName: '', quantity: 0, unit: 'g' }
   ])
+
+  // Auto-suggest when recipe name changes
+  useEffect(() => {
+    // Clear previous timer
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current)
+    }
+
+    // Only auto-suggest if name is not empty and feature is enabled
+    if (name.trim().length >= 3 && autoSuggestEnabled) {
+      // Wait 1 second after user stops typing
+      debounceTimerRef.current = setTimeout(() => {
+        // Only suggest if ingredients are empty or just one empty ingredient
+        const hasEmptyIngredients = ingredients.length === 1 && 
+          ingredients[0].ingredientName === '' && 
+          ingredients[0].quantity === 0
+
+        if (hasEmptyIngredients) {
+          handleSuggestWithAI(true) // Pass true to indicate auto-suggestion
+        }
+      }, 1000)
+    }
+
+    // Cleanup
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current)
+      }
+    }
+  }, [name, autoSuggestEnabled])
 
   const handleAddIngredient = () => {
     setIngredients([...ingredients, { ingredientName: '', quantity: 0, unit: 'g' }])
@@ -55,9 +87,11 @@ export default function NewRecipePage() {
     setIngredients(updated)
   }
 
-  const handleSuggestWithAI = async () => {
+  const handleSuggestWithAI = async (isAutoSuggest = false) => {
     if (!name.trim()) {
-      setError('Veuillez entrer un nom de recette pour obtenir des suggestions')
+      if (!isAutoSuggest) {
+        setError('Veuillez entrer un nom de recette pour obtenir des suggestions')
+      }
       return
     }
 
@@ -83,9 +117,16 @@ export default function NewRecipePage() {
       }))
 
       setIngredients(suggested)
+      
+      // Disable auto-suggest after first successful suggestion
+      if (isAutoSuggest) {
+        setAutoSuggestEnabled(false)
+      }
     } catch (err) {
       console.error('Erreur suggestion:', err)
-      setError('Impossible d\'obtenir des suggestions. Réessayez.')
+      if (!isAutoSuggest) {
+        setError('Impossible d\'obtenir des suggestions. Réessayez.')
+      }
     } finally {
       setSuggesting(false)
     }
@@ -182,6 +223,17 @@ export default function NewRecipePage() {
                     placeholder="Ex: Pâtes carbonara"
                     required
                   />
+                  {name.trim().length >= 3 && autoSuggestEnabled && (
+                    <p className="mt-1 text-xs text-gray-500 flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" />
+                      Les ingrédients seront suggérés automatiquement...
+                    </p>
+                  )}
+                  {!autoSuggestEnabled && name.trim().length > 0 && (
+                    <p className="mt-1 text-xs text-green-600">
+                      ✓ Ingrédients suggérés automatiquement
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -233,11 +285,19 @@ export default function NewRecipePage() {
             {/* Ingredients with AI Suggestion */}
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold">Ingrédients</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-semibold">Ingrédients</h2>
+                  {suggesting && (
+                    <div className="flex items-center gap-2 text-sm text-green-600">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Suggestion en cours...</span>
+                    </div>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={handleSuggestWithAI}
+                  onClick={() => handleSuggestWithAI(false)}
                   disabled={suggesting || !name.trim()}
                   className="gap-2"
                 >

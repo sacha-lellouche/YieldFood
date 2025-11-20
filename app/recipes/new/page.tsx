@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Sparkles, Plus, Trash2, Save, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import IngredientAutocomplete from '@/components/IngredientAutocomplete'
 
 interface RecipeIngredient {
   ingredientId?: string
@@ -84,6 +85,16 @@ export default function NewRecipePage() {
   ) => {
     const updated = [...ingredients]
     updated[index] = { ...updated[index], [field]: value }
+    setIngredients(updated)
+  }
+
+  const handleIngredientSelect = (index: number, suggestion: any) => {
+    const updated = [...ingredients]
+    updated[index] = {
+      ...updated[index],
+      ingredientName: suggestion.name,
+      unit: suggestion.unit
+    }
     setIngredients(updated)
   }
 
@@ -310,12 +321,13 @@ export default function NewRecipePage() {
                 {ingredients.map((ingredient, index) => (
                   <div key={index} className="flex gap-2 items-start">
                     <div className="flex-1">
-                      <Input
-                        placeholder="Nom de l'ingrédient"
+                      <IngredientAutocomplete
                         value={ingredient.ingredientName}
-                        onChange={(e) =>
-                          handleIngredientChange(index, 'ingredientName', e.target.value)
+                        onChange={(value) =>
+                          handleIngredientChange(index, 'ingredientName', value)
                         }
+                        onSelect={(suggestion) => handleIngredientSelect(index, suggestion)}
+                        placeholder="Nom de l'ingrédient"
                       />
                     </div>
                     <div className="w-24">

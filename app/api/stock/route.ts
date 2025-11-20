@@ -342,3 +342,122 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+
+/**
+ * PUT /api/stock?id=xxx
+ * Met à jour un stock existant
+ * Body: { product_id: string, quantity: number }
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+        },
+      }
+    )
+
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Non autorisé' },
+        { status: 401 }
+      )
+    }
+
+    // Récupérer l'ID depuis les query params
+    const searchParams = request.nextUrl.searchParams
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'L\'ID du stock est requis' },
+        { status: 400 }
+      )
+    }
+
+    // Récupérer les données du body
+    const body = await request.json()
+    const { product_id, quantity } = body
+
+    if (typeof quantity !== 'number' || quantity < 0) {
+      return NextResponse.json(
+        { error: 'La quantité doit être un nombre positif' },
+        { status: 400 }
+      )
+    }
+
+    // Vérifier que le stock existe et appartient à l'utilisateur
+    const { data: stock, error: fetchError } = await supabase
+      .from('stock')
+      .select('id, user_id, product_id')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+
+    if (fetchError || !stock) {
+      return NextResponse.json(
+        { error: 'Stock non trouvé' },
+        { status: 404 }
+      )
+    }
+
+    // Mettre à jour le stock
+    const { data: updatedStock, error: updateError } = await supabase
+      .from('stock')
+      .update({
+        quantity: quantity,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(`
+        id,
+        user_id,
+        product_id,
+        quantity,
+        created_at,
+        updated_at,
+        product:product_id (
+          id,
+          name,
+          description,
+          unit,
+          category,
+          created_at
+        )
+      `)
+      .single()
+
+    if (updateError) {
+      console.error('Error updating stock:', updateError)
+      return NextResponse.json(
+        { error: 'Erreur lors de la mise à jour du stock' },
+        { status: 500 }
+      )
+    }
+
+    // Transformer les données
+    const transformedStock = {
+      ...updatedStock,
+      product: Array.isArray(updatedStock.product) ? updatedStock.product[0] : updatedStock.product
+    }
+
+    return NextResponse.json(transformedStock, { status: 200 })
+  } catch (error) {
+    console.error('Unexpected error in PUT /api/stock:', error)
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    )
+  }
+}

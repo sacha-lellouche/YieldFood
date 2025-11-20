@@ -15,8 +15,15 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search, Package, Minus } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Package, Minus, Filter, ArrowUpDown } from 'lucide-react'
 import { StockDialog } from '@/components/StockDialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 export default function StocksPage() {
   const { user, loading: authLoading } = useAuth()
@@ -24,9 +31,14 @@ export default function StocksPage() {
   const [stocks, setStocks] = useState<StockWithProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
+  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category'>('name')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingStock, setEditingStock] = useState<StockWithProduct | null>(null)
   const [updatingQuantity, setUpdatingQuantity] = useState<string | null>(null)
+  const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
+  const [tempQuantity, setTempQuantity] = useState<string>('')
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -130,11 +142,101 @@ export default function StocksPage() {
     }
   }
 
-  const getStockStatus = (quantity: number) => {
+  const handleQuantityEdit = (stock: StockWithProduct) => {
+    setEditingQuantityId(stock.id)
+    setTempQuantity(stock.quantity.toString())
+  }
+
+  const handleQuantityChange = (value: string) => {
+    // Permettre les nombres décimaux
+    if (value === '' || /^\d*\.?\d*$/.test(value)) {
+      setTempQuantity(value)
+    }
+  }
+
+  const handleQuantitySave = async (stock: StockWithProduct) => {
+    const newQuantity = parseFloat(tempQuantity)
+    
+    if (isNaN(newQuantity) || newQuantity < 0) {
+      alert('Quantité invalide')
+      setEditingQuantityId(null)
+      return
+    }
+
+    setUpdatingQuantity(stock.id)
+    try {
+      const response = await fetch(`/api/stock?id=${stock.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          product_id: stock.product_id,
+          quantity: newQuantity 
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStocks(stocks.map((s) =>
+          s.id === stock.id ? { ...s, quantity: newQuantity } : s
+        ))
+        setEditingQuantityId(null)
+      } else {
+        alert('Erreur lors de la mise à jour')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la mise à jour')
+    } finally {
+      setUpdatingQuantity(null)
+    }
+  }
+
+  const handleQuantityCancel = () => {
+    setEditingQuantityId(null)
+    setTempQuantity('')
+  }
+
+  const getStockStatus = (quantity: number, threshold: number = 5) => {
     if (quantity === 0) return { color: 'text-red-600', label: 'Rupture' }
-    if (quantity < 5) return { color: 'text-orange-600', label: 'Bas' }
+    if (quantity < threshold) return { color: 'text-orange-600', label: 'Bas' }
     return { color: 'text-green-600', label: 'OK' }
   }
+
+  // Obtenir les catégories uniques
+  const categories = Array.from(new Set(stocks.map(s => s.product.category).filter(Boolean)))
+
+  // Filtrer et trier les stocks
+  const filteredAndSortedStocks = stocks
+    .filter(stock => {
+      // Filtre par recherche
+      if (search && !stock.product.name.toLowerCase().includes(search.toLowerCase())) {
+        return false
+      }
+      // Filtre par catégorie
+      if (categoryFilter !== 'all' && stock.product.category !== categoryFilter) {
+        return false
+      }
+      return true
+    })
+    .sort((a, b) => {
+      let comparison = 0
+      
+      switch (sortBy) {
+        case 'name':
+          comparison = a.product.name.localeCompare(b.product.name)
+          break
+        case 'quantity':
+          comparison = a.quantity - b.quantity
+          break
+        case 'category':
+          const catA = a.product.category || 'Zzz'
+          const catB = b.product.category || 'Zzz'
+          comparison = catA.localeCompare(catB)
+          break
+      }
+      
+      return sortOrder === 'asc' ? comparison : -comparison
+    })
 
   if (authLoading || !user) {
     return (
@@ -188,7 +290,10 @@ export default function StocksPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">
-                {stocks.filter((s) => s.quantity > 0 && s.quantity < 5).length}
+                {stocks.filter((s) => {
+                  const threshold = s.product.low_stock_threshold || 5
+                  return s.quantity > 0 && s.quantity < threshold
+                }).length}
               </div>
             </CardContent>
           </Card>
@@ -208,13 +313,14 @@ export default function StocksPage() {
           </Card>
         </div>
 
-        {/* Search */}
+        {/* Search and Filters */}
         <Card>
           <CardHeader>
-            <CardTitle>Rechercher</CardTitle>
-            <CardDescription>Filtrer par nom de produit ou catégorie</CardDescription>
+            <CardTitle>Rechercher et Filtrer</CardTitle>
+            <CardDescription>Filtrer par nom, catégorie et trier les résultats</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {/* Search */}
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
@@ -222,25 +328,102 @@ export default function StocksPage() {
                   placeholder="Rechercher un produit..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                   className="pl-10"
                 />
               </div>
-              <Button onClick={handleSearch} variant="outline">
-                Rechercher
-              </Button>
               {search && (
                 <Button
-                  onClick={() => {
-                    setSearch('')
-                    fetchStocks()
-                  }}
+                  onClick={() => setSearch('')}
                   variant="ghost"
                 >
                   Réinitialiser
                 </Button>
               )}
             </div>
+
+            {/* Filters and Sort */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Category Filter */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <Filter className="h-4 w-4" />
+                  Catégorie
+                </label>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Toutes les catégories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Toutes les catégories</SelectItem>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat} value={cat!}>
+                        {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort By */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <ArrowUpDown className="h-4 w-4" />
+                  Trier par
+                </label>
+                <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Nom" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Nom</SelectItem>
+                    <SelectItem value="quantity">Quantité</SelectItem>
+                    <SelectItem value="category">Catégorie</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ordre</label>
+                <Select value={sortOrder} onValueChange={(value: any) => setSortOrder(value)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Croissant" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">Croissant ↑</SelectItem>
+                    <SelectItem value="desc">Décroissant ↓</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Active Filters Summary */}
+            {(search || categoryFilter !== 'all') && (
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <span>Filtres actifs:</span>
+                {search && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                    Recherche: {search}
+                  </span>
+                )}
+                {categoryFilter !== 'all' && (
+                  <span className="px-2 py-1 bg-green-100 text-green-700 rounded">
+                    Catégorie: {categoryFilter}
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearch('')
+                    setCategoryFilter('all')
+                  }}
+                  className="ml-auto"
+                >
+                  Tout réinitialiser
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -249,7 +432,8 @@ export default function StocksPage() {
           <CardHeader>
             <CardTitle>Liste des Stocks</CardTitle>
             <CardDescription>
-              {stocks.length} produit{stocks.length !== 1 ? 's' : ''} en stock
+              {filteredAndSortedStocks.length} produit{filteredAndSortedStocks.length !== 1 ? 's' : ''} 
+              {(search || categoryFilter !== 'all') && ` (${stocks.length} au total)`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -257,22 +441,37 @@ export default function StocksPage() {
               <div className="flex justify-center py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
               </div>
-            ) : stocks.length === 0 ? (
+            ) : filteredAndSortedStocks.length === 0 ? (
               <div className="text-center py-12">
                 <Package className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-lg font-medium text-gray-900">
-                  Aucun stock
+                  {stocks.length === 0 ? 'Aucun stock' : 'Aucun résultat'}
                 </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  Commencez par ajouter des produits à votre inventaire
+                  {stocks.length === 0 
+                    ? 'Commencez par ajouter des produits à votre inventaire'
+                    : 'Aucun produit ne correspond à vos critères de recherche'}
                 </p>
-                <Button
-                  onClick={handleAdd}
-                  className="mt-4 bg-green-600 hover:bg-green-700"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Ajouter un produit
-                </Button>
+                {stocks.length === 0 ? (
+                  <Button
+                    onClick={handleAdd}
+                    className="mt-4 bg-green-600 hover:bg-green-700"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ajouter un produit
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      setSearch('')
+                      setCategoryFilter('all')
+                    }}
+                    variant="outline"
+                    className="mt-4"
+                  >
+                    Réinitialiser les filtres
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -288,8 +487,9 @@ export default function StocksPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stocks.map((stock) => {
-                      const status = getStockStatus(stock.quantity)
+                    {filteredAndSortedStocks.map((stock) => {
+                      const threshold = stock.product.low_stock_threshold || 5
+                      const status = getStockStatus(stock.quantity, threshold)
                       return (
                         <TableRow key={stock.id}>
                           <TableCell className="font-medium">
@@ -300,8 +500,50 @@ export default function StocksPage() {
                               {stock.product.category || 'Non catégorisé'}
                             </span>
                           </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {stock.quantity}
+                          <TableCell className="text-right">
+                            {editingQuantityId === stock.id ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <Input
+                                  type="text"
+                                  value={tempQuantity}
+                                  onChange={(e) => handleQuantityChange(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      handleQuantitySave(stock)
+                                    } else if (e.key === 'Escape') {
+                                      handleQuantityCancel()
+                                    }
+                                  }}
+                                  className="w-24 text-right"
+                                  autoFocus
+                                  disabled={updatingQuantity === stock.id}
+                                />
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleQuantitySave(stock)}
+                                  disabled={updatingQuantity === stock.id}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  ✓
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleQuantityCancel}
+                                  disabled={updatingQuantity === stock.id}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleQuantityEdit(stock)}
+                                className="font-medium hover:text-green-600 transition-colors cursor-pointer"
+                                title="Cliquer pour modifier"
+                              >
+                                {stock.quantity}
+                              </button>
+                            )}
                           </TableCell>
                           <TableCell>{stock.product.unit}</TableCell>
                           <TableCell>
@@ -314,26 +556,8 @@ export default function StocksPage() {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => adjustQuantity(stock, -1)}
-                                disabled={updatingQuantity === stock.id || stock.quantity === 0}
-                                title="Retirer 1"
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => adjustQuantity(stock, 1)}
-                                disabled={updatingQuantity === stock.id}
-                                title="Ajouter 1"
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
                                 onClick={() => handleEdit(stock)}
-                                title="Modifier"
+                                title="Modifier le produit"
                               >
                                 <Pencil className="h-4 w-4" />
                               </Button>

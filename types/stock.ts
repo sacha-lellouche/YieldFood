@@ -6,6 +6,7 @@ export interface Product {
   unit: string
   created_at: string
   category: string | null
+  low_stock_threshold: number | null
 }
 
 export type CreateProductInput = Omit<Product, 'id' | 'created_at'>

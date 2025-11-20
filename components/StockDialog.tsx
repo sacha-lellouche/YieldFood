@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import IngredientAutocomplete from '@/components/IngredientAutocomplete'
+import { AddIngredientDialog } from '@/components/AddIngredientDialog'
 
 interface StockDialogProps {
   open: boolean
@@ -34,52 +36,36 @@ export function StockDialog({
   stock,
   onClose,
 }: StockDialogProps) {
-  const [products, setProducts] = useState<Product[]>([])
-  const [loadingProducts, setLoadingProducts] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<string>('')
-  const [productSearchTerm, setProductSearchTerm] = useState('')
+  const [selectedProductName, setSelectedProductName] = useState('')
+  const [selectedProductUnit, setSelectedProductUnit] = useState('')
   const [quantity, setQuantity] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showAddDialog, setShowAddDialog] = useState(false)
+  const [newIngredientName, setNewIngredientName] = useState('')
 
   // Charger les produits disponibles
   useEffect(() => {
     if (open && !stock) {
-      fetchProducts()
+      // Plus besoin de charger tous les produits, l'autocomplete s'en charge
     }
   }, [open, stock])
-
-  // Filtrer les produits selon le terme de recherche
-  const filteredProducts = products.filter(product =>
-    product.name.toLowerCase().includes(productSearchTerm.toLowerCase())
-  )
 
   useEffect(() => {
     if (stock) {
       setSelectedProductId(stock.product_id)
+      setSelectedProductName(stock.product.name)
+      setSelectedProductUnit(stock.product.unit)
       setQuantity(stock.quantity.toString())
     } else {
       setSelectedProductId('')
+      setSelectedProductName('')
+      setSelectedProductUnit('')
       setQuantity('')
-      setProductSearchTerm('')
     }
     setError('')
   }, [stock, open])
-
-  const fetchProducts = async () => {
-    setLoadingProducts(true)
-    try {
-      const response = await fetch('/api/products')
-      if (response.ok) {
-        const data = await response.json()
-        setProducts(data)
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err)
-    } finally {
-      setLoadingProducts(false)
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -148,7 +134,21 @@ export function StockDialog({
     }
   }
 
-  const selectedProduct = products.find(p => p.id === selectedProductId)
+  const handleAddNewIngredient = (name: string) => {
+    setNewIngredientName(name)
+    setShowAddDialog(true)
+  }
+
+  const handleIngredientAdded = (ingredient: { id: string; name: string; unit: string }) => {
+    setSelectedProductId(ingredient.id)
+    setSelectedProductName(ingredient.name)
+    setSelectedProductUnit(ingredient.unit)
+    setShowAddDialog(false)
+    
+    // Fermer le dialogue et rafraîchir la liste des stocks
+    // Car l'ingrédient a été automatiquement ajouté au stock avec quantité 0
+    onClose(true)
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -177,51 +177,22 @@ export function StockDialog({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="product">Produit</Label>
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="Rechercher (Tomate, Farine, Huile...)"
-                      value={productSearchTerm}
-                      onChange={(e) => setProductSearchTerm(e.target.value)}
-                      disabled={loading || loadingProducts}
-                      className="mb-2"
-                    />
-                    <Select 
-                      value={selectedProductId} 
-                      onValueChange={setSelectedProductId}
-                      disabled={loading || loadingProducts}
-                    >
-                      <SelectTrigger id="product">
-                        <SelectValue placeholder="Sélectionner un produit" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-[300px]">
-                        {loadingProducts ? (
-                          <SelectItem value="loading" disabled>
-                            Chargement...
-                          </SelectItem>
-                        ) : filteredProducts.length === 0 ? (
-                          <SelectItem value="empty" disabled>
-                            {productSearchTerm ? 'Aucun produit trouvé' : 'Aucun produit disponible'}
-                          </SelectItem>
-                        ) : (
-                          filteredProducts.map((product) => (
-                            <SelectItem key={product.id} value={product.id}>
-                              <div className="flex items-center justify-between w-full">
-                                <span>{product.name}</span>
-                                <span className="text-xs text-gray-500 ml-2">
-                                  {product.unit}
-                                  {product.category && ` • ${product.category}`}
-                                </span>
-                              </div>
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {selectedProductId && selectedProduct && (
+                  <IngredientAutocomplete
+                    value={selectedProductName}
+                    onChange={setSelectedProductName}
+                    onSelect={(suggestion) => {
+                      if (suggestion.id) {
+                        setSelectedProductId(suggestion.id)
+                        setSelectedProductName(suggestion.name)
+                        setSelectedProductUnit(suggestion.unit)
+                      }
+                    }}
+                    onAddNew={handleAddNewIngredient}
+                    placeholder="Rechercher un produit (Tomate, Farine, Huile...)"
+                  />
+                  {selectedProductId && selectedProductUnit && (
                     <p className="text-xs text-gray-500">
-                      Unité: {selectedProduct.unit}
-                      {selectedProduct.category && ` • Catégorie: ${selectedProduct.category}`}
+                      ✓ Produit sélectionné • Unité: {selectedProductUnit}
                     </p>
                   )}
                 </div>
@@ -262,7 +233,7 @@ export function StockDialog({
                 <div className="space-y-2">
                   <Label>Unité</Label>
                   <div className="h-10 px-3 py-2 bg-gray-100 rounded-md flex items-center text-sm font-medium">
-                    {stock ? stock.product.unit : selectedProduct?.unit}
+                    {stock ? stock.product.unit : selectedProductUnit}
                   </div>
                 </div>
               )}
@@ -288,6 +259,13 @@ export function StockDialog({
           </DialogFooter>
         </form>
       </DialogContent>
+
+      <AddIngredientDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        initialName={newIngredientName}
+        onSuccess={handleIngredientAdded}
+      />
     </Dialog>
   )
 }

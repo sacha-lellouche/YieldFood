@@ -5,12 +5,27 @@ Application SaaS complète pour la gestion de restaurants, construite avec Next.
 
 ## ✨ Fonctionnalités
 
-### 📦 Module "Mes Stocks" (Nouveau !)
+### 🔄 Intégration Lightspeed (Nouveau !)
+- ✅ Synchronisation automatique des ventes Lightspeed → Supabase
+- ✅ Décomposition automatique recettes → ingrédients
+- ✅ Alertes de stock en temps réel
+- ✅ Dashboard de monitoring complet
+- ✅ Traçabilité complète des mouvements
+- 📖 **Guide complet** : Voir `QUICK_START.md` ou `LIGHTSPEED_INDEX.md`
+
+### 📦 Module "Mes Stocks"
 - ✅ Gestion complète des ingrédients (CRUD)
-- ✅ Recherche en temps réel
+- ✅ Suivi en temps réel du stock
+- ✅ Recherche et filtres avancés
 - ✅ Statistiques de stock
 - ✅ Interface responsive et moderne
 - ✅ Sécurité RLS (Row Level Security)
+
+### 🍴 Module "Mes Recettes"
+- ✅ Création et gestion de recettes
+- ✅ Association d'ingrédients avec quantités
+- ✅ SKU Lightspeed pour synchronisation
+- ✅ Suggestions AI d'ingrédients
 
 ### 🔐 Authentification
 - Inscription / Connexion avec Supabase Auth
@@ -26,6 +41,7 @@ Application SaaS complète pour la gestion de restaurants, construite avec Next.
 ### Prérequis
 - Node.js 18+
 - Un compte Supabase
+- Un compte Lightspeed (optionnel, pour la synchronisation)
 - npm ou yarn
 
 ### Installation
@@ -33,7 +49,7 @@ Application SaaS complète pour la gestion de restaurants, construite avec Next.
 1. **Cloner le projet**
 ```bash
 git clone https://github.com/sacha-lellouche/YieldFood.git
-cd YieldFood-1
+cd YieldFood
 ```
 
 2. **Installer les dépendances**
@@ -42,10 +58,14 @@ npm install
 ```
 
 3. **Configurer Supabase**
-   - Copiez `.env.local` et ajoutez vos credentials Supabase
-   - Exécutez le script SQL : `supabase/migrations/create_ingredients_table.sql`
+   - Copiez `.env.example` vers `.env.local`
+   - Ajoutez vos credentials Supabase
+   - Exécutez les migrations SQL dans l'ordre :
+     - `supabase/migrations/04_create_all_recipes_tables.sql`
+     - `supabase/migrations/05_lightspeed_integration.sql`
+     - `supabase/migrations/06_seed_test_data_lightspeed.sql` (optionnel)
    
-   📖 **Guide détaillé** : Voir `QUICKSTART.md`
+   📖 **Guide détaillé** : Voir `QUICK_START.md`
 
 4. **Lancer l'application**
 ```bash

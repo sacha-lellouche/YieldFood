@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:lightspeed": "tsx scripts/test-lightspeed.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

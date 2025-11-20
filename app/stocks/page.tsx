@@ -196,10 +196,85 @@ export default function StocksPage() {
     setTempQuantity('')
   }
 
-  const getStockStatus = (quantity: number, threshold: number = 5) => {
+  const getStockStatus = (quantity: number, threshold: number) => {
     if (quantity === 0) return { color: 'text-red-600', label: 'Rupture' }
     if (quantity < threshold) return { color: 'text-orange-600', label: 'Bas' }
     return { color: 'text-green-600', label: 'OK' }
+  }
+
+  // Fonction pour obtenir l'emoji/icône d'un ingrédient
+  const getIngredientEmoji = (name: string, category: string | null) => {
+    const lowerName = name.toLowerCase()
+    
+    // Mapping spécifique par nom d'ingrédient
+    const emojiMap: Record<string, string> = {
+      // Fruits
+      'pomme': '🍎', 'poire': '🍐', 'banane': '🍌', 'orange': '🍊', 
+      'citron': '🍋', 'fraise': '🍓', 'raisin': '🍇', 'pastèque': '🍉',
+      'melon': '🍈', 'cerise': '🍒', 'pêche': '🍑', 'ananas': '🍍',
+      'kiwi': '🥝', 'avocat': '🥑', 'mangue': '🥭', 'noix de coco': '🥥',
+      
+      // Légumes
+      'tomate': '🍅', 'carotte': '🥕', 'brocoli': '🥦', 'salade': '🥬',
+      'laitue': '🥬', 'poivron': '🫑', 'concombre': '🥒', 'aubergine': '🍆',
+      'pomme de terre': '🥔', 'patate': '🥔', 'maïs': '🌽', 'piment': '🌶️',
+      'champignon': '🍄', 'oignon': '🧅', 'ail': '🧄',
+      
+      // Protéines
+      'poulet': '🍗', 'viande': '🥩', 'boeuf': '🥩', 'porc': '🥓',
+      'bacon': '🥓', 'lardons': '🥓', 'jambon': '🥓', 'saucisse': '🌭',
+      'poisson': '🐟', 'saumon': '🐟', 'thon': '🐟', 'crevette': '🦐',
+      'œuf': '🥚', 'oeuf': '🥚', 'œufs': '🥚', 'oeufs': '🥚',
+      
+      // Produits laitiers
+      'lait': '🥛', 'fromage': '🧀', 'beurre': '🧈', 'crème': '🥛',
+      'yaourt': '🥛', 'mozzarella': '🧀', 'parmesan': '🧀', 'emmental': '🧀',
+      
+      // Céréales et pâtes
+      'pain': '🍞', 'baguette': '🥖', 'pâtes': '🍝', 'riz': '🍚',
+      'farine': '🌾', 'blé': '🌾', 'avoine': '🌾', 'quinoa': '🌾',
+      
+      // Sucreries et desserts
+      'gâteau': '🍰', 'chocolat': '🍫', 'cookie': '🍪', 'bonbon': '🍬',
+      'sucre': '🧁', 'miel': '🍯', 'confiture': '🍯',
+      
+      // Boissons
+      'café': '☕', 'thé': '🍵', 'vin': '🍷', 'bière': '🍺',
+      'eau': '💧', 'jus': '🧃', 'soda': '🥤',
+      
+      // Condiments et épices
+      'huile': '🫒', "huile d'olive": '🫒', 'vinaigre': '🧴',
+      'sel': '🧂', 'poivre': '🧂', 'épice': '🌶️', 'herbes': '🌿',
+      'basilic': '🌿', 'persil': '🌿', 'coriandre': '🌿', 'menthe': '🌿',
+      'curry': '🌶️', 'paprika': '🌶️', 'cannelle': '🌰',
+      
+      // Fruits à coque
+      'noix': '🥜', 'noisette': '🌰', 'amande': '🥜', 'cacahuète': '🥜',
+      'pistache': '🥜',
+    }
+    
+    // Chercher une correspondance exacte
+    for (const [key, emoji] of Object.entries(emojiMap)) {
+      if (lowerName.includes(key)) {
+        return emoji
+      }
+    }
+    
+    // Fallback par catégorie
+    if (category) {
+      const lowerCategory = category.toLowerCase()
+      if (lowerCategory.includes('fruit')) return '🍎'
+      if (lowerCategory.includes('légume')) return '🥬'
+      if (lowerCategory.includes('viande') || lowerCategory.includes('poisson')) return '🥩'
+      if (lowerCategory.includes('lait') || lowerCategory.includes('produit laitier')) return '🥛'
+      if (lowerCategory.includes('céréale') || lowerCategory.includes('féculent')) return '🌾'
+      if (lowerCategory.includes('épice') || lowerCategory.includes('condiment')) return '🧂'
+      if (lowerCategory.includes('boisson')) return '🥤'
+      if (lowerCategory.includes('sucre') || lowerCategory.includes('dessert')) return '🍰'
+    }
+    
+    // Emoji par défaut
+    return '🥘'
   }
 
   // Obtenir les catégories uniques
@@ -490,10 +565,14 @@ export default function StocksPage() {
                     {filteredAndSortedStocks.map((stock) => {
                       const threshold = stock.product.low_stock_threshold || 5
                       const status = getStockStatus(stock.quantity, threshold)
+                      const emoji = getIngredientEmoji(stock.product.name, stock.product.category)
                       return (
                         <TableRow key={stock.id}>
                           <TableCell className="font-medium">
-                            {stock.product.name}
+                            <div className="flex items-center gap-3">
+                              <span className="text-3xl">{emoji}</span>
+                              <span>{stock.product.name}</span>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

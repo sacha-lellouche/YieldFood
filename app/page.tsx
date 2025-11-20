@@ -39,12 +39,20 @@ export default function Home() {
           )}
           
           {!loading && user && (
-            <Link
-              href="/dashboard"
-              className="inline-block bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors shadow-lg"
-            >
-              Accéder au Dashboard
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/stocks"
+                className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-lg font-bold text-lg transition-colors shadow-lg"
+              >
+                📦 Accéder à mes stocks
+              </Link>
+              <Link
+                href="/recipes/new"
+                className="bg-white hover:bg-gray-50 text-green-600 px-8 py-4 rounded-lg font-bold text-lg border-2 border-green-600 transition-colors shadow-lg"
+              >
+                📝 Entrer une nouvelle recette
+              </Link>
+            </div>
           )}
         </div>
 

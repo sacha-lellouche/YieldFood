@@ -92,6 +92,7 @@ export default function NewRecipePage() {
     const updated = [...ingredients]
     updated[index] = {
       ...updated[index],
+      ingredientId: suggestion.id, // Sauvegarder l'ID de l'ingrédient
       ingredientName: suggestion.name,
       unit: suggestion.unit
     }
@@ -176,6 +177,7 @@ export default function NewRecipePage() {
           prep_time: prepTime,
           cook_time: cookTime,
           ingredients: validIngredients.map(ing => ({
+            ingredient_id: ing.ingredientId || null, // Envoyer l'ID si disponible
             ingredient_name: ing.ingredientName.trim(),
             quantity: ing.quantity,
             unit: ing.unit

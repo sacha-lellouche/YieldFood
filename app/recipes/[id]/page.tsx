@@ -13,6 +13,7 @@ import IngredientAutocomplete from '@/components/IngredientAutocomplete'
 
 interface RecipeIngredient {
   id?: string
+  ingredient_id?: string | null // ID de l'ingrédient dans le catalogue
   ingredient_name: string
   quantity: number
   unit: string
@@ -104,6 +105,7 @@ export default function RecipeDetailPage() {
     const updated = [...ingredients]
     updated[index] = {
       ...updated[index],
+      ingredient_id: suggestion.id, // Sauvegarder l'ID de l'ingrédient
       ingredient_name: suggestion.name,
       unit: suggestion.unit
     }
@@ -143,6 +145,7 @@ export default function RecipeDetailPage() {
           prep_time: prepTime,
           cook_time: cookTime,
           ingredients: validIngredients.map(ing => ({
+            ingredient_id: ing.ingredient_id || null, // Envoyer l'ID si disponible
             ingredient_name: ing.ingredient_name.trim(),
             quantity: ing.quantity,
             unit: ing.unit

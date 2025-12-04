@@ -271,19 +271,29 @@ export default function RecipeDetailPage() {
               </Card>
 
               <Card className="p-6">
-                <h2 className="text-xl font-semibold mb-4">Ingrédients</h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-semibold">Ingrédients</h2>
+                  <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+                    Pour 1 personne
+                  </span>
+                </div>
                 <div className="space-y-2">
-                  {recipe?.ingredients.map((ing, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
-                    >
-                      <span className="font-medium">{ing.ingredient_name}</span>
-                      <span className="text-gray-600">
-                        {ing.quantity} {ing.unit}
-                      </span>
-                    </div>
-                  ))}
+                  {recipe?.ingredients.map((ing, index) => {
+                    const quantityPerPerson = recipe.servings > 0 
+                      ? (ing.quantity / recipe.servings).toFixed(2).replace(/\.?0+$/, '')
+                      : ing.quantity
+                    return (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg"
+                      >
+                        <span className="font-medium">{ing.ingredient_name}</span>
+                        <span className="text-gray-600">
+                          {quantityPerPerson} {ing.unit}
+                        </span>
+                      </div>
+                    )
+                  })}
                 </div>
               </Card>
             </>

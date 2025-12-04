@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
         user_id,
         product_id,
         quantity,
+        supplier_id,
         created_at,
         updated_at,
         product:product_id (
@@ -387,7 +388,7 @@ export async function PUT(request: NextRequest) {
 
     // Récupérer les données du body
     const body = await request.json()
-    const { product_id, quantity } = body
+    const { product_id, quantity, supplier_id } = body
 
     if (typeof quantity !== 'number' || quantity < 0) {
       return NextResponse.json(
@@ -411,13 +412,21 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    // Préparer les données de mise à jour
+    const updateData: any = {
+      quantity: quantity,
+      updated_at: new Date().toISOString(),
+    }
+
+    // Ajouter supplier_id si fourni
+    if (supplier_id !== undefined) {
+      updateData.supplier_id = supplier_id
+    }
+
     // Mettre à jour le stock
     const { data: updatedStock, error: updateError } = await supabase
       .from('stock')
-      .update({
-        quantity: quantity,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', id)
       .eq('user_id', user.id)
       .select(`
@@ -425,6 +434,7 @@ export async function PUT(request: NextRequest) {
         user_id,
         product_id,
         quantity,
+        supplier_id,
         created_at,
         updated_at,
         product:product_id (

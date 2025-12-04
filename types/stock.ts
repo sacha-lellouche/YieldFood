@@ -17,6 +17,7 @@ export interface Stock {
   user_id: string
   product_id: string
   quantity: number
+  supplier_id: string | null
   created_at: string
   updated_at: string
 }

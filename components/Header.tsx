@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Package, LogOut, Home, ChefHat } from 'lucide-react'
+import { Package, LogOut, Home, ChefHat, Store } from 'lucide-react'
 
 export default function Header() {
   const { user, signOut } = useAuth()
@@ -50,6 +50,13 @@ export default function Header() {
               <ChefHat className="h-4 w-4" />
               Mes Recettes
             </Link>
+            <Link
+              href="/suppliers"
+              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+            >
+              <Store className="h-4 w-4" />
+              Mes Fournisseurs
+            </Link>
           </nav>
 
           {/* User actions */}
@@ -91,6 +98,13 @@ export default function Header() {
           >
             <ChefHat className="h-4 w-4" />
             Recettes
+          </Link>
+          <Link
+            href="/suppliers"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
+          >
+            <Store className="h-4 w-4" />
+            Fournisseurs
           </Link>
         </nav>
       </div>

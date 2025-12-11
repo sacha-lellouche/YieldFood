@@ -433,7 +433,7 @@ export default function StocksPage() {
               Gérez votre inventaire de produits
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             {consumptionSummary && consumptionSummary.totalDishes > 0 && (
               <Button
                 onClick={() => setShowConsumptionSummary(true)}

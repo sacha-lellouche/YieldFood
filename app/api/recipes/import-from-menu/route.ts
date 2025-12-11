@@ -61,46 +61,83 @@ export async function POST(request: NextRequest) {
 
       // Pour chaque ingrédient, créer ou récupérer depuis la table product
       if (dish.ingredients && dish.ingredients.length > 0) {
+        console.log(`  → ${dish.ingredients.length} ingrédients à traiter`)
         for (const ingredient of dish.ingredients) {
           // Support des anciens formats (string) et nouveaux formats (objet avec quantité)
           const ingredientName = typeof ingredient === 'string' ? ingredient : ingredient.name
           const quantity = typeof ingredient === 'string' ? 0.1 : ingredient.quantity
           const unit = typeof ingredient === 'string' ? 'kg' : ingredient.unit
+          console.log(`     - ${ingredientName} (${quantity} ${unit})`)
           
-          // Chercher si le produit existe
-          let { data: product } = await supabase
+          // Chercher si le produit existe (les produits sont globaux, pas liés à l'utilisateur)
+          let { data: product, error: searchError } = await supabase
             .from('product')
             .select('id')
-            .eq('user_id', user.id)
             .ilike('name', ingredientName)
-            .single()
+            .maybeSingle()
+
+          console.log(`       🔍 Recherche: ${product ? 'Trouvé ID=' + product.id : 'Non trouvé'}`)
 
           // Si le produit n'existe pas, le créer
           if (!product) {
-            const { data: newProduct } = await supabase
+            console.log(`       ➕ Création produit...`)
+            const { data: newProduct, error: createError } = await supabase
               .from('product')
               .insert({
-                user_id: user.id,
                 name: ingredientName,
                 unit: unit,
                 category: 'Ingrédients',
+                low_stock_threshold: 5,
               })
               .select()
               .single()
 
+            if (createError) {
+              console.error(`       ❌ Erreur création:`, createError)
+            } else {
+              console.log(`       ✅ Créé ID=${newProduct?.id}`)
+            }
+
             product = newProduct
           }
 
-          // Lier l'ingrédient à la recette avec les quantités pour 1 personne
+          // Créer automatiquement une entrée dans les stocks pour cet utilisateur
           if (product) {
-            await supabase
-              .from('recipe_ingredients')
-              .insert({
-                recipe_id: recipe.id,
-                product_id: product.id,
-                quantity: quantity,
-                unit: unit,
-              })
+            // Vérifier si le stock existe déjà pour cet utilisateur
+            const { data: existingStock } = await supabase
+              .from('stock')
+              .select('id')
+              .eq('user_id', user.id)
+              .eq('product_id', product.id)
+              .maybeSingle()
+
+            if (!existingStock) {
+              await supabase
+                .from('stock')
+                .insert({
+                  user_id: user.id,
+                  product_id: product.id,
+                  quantity: 0
+                })
+            }
+          }
+
+          // Lier l'ingrédient à la recette avec les quantités pour 1 personne
+          console.log(`       🔗 Liaison ingredient_name="${ingredientName}" à recipe=${recipe.id}`)
+          const { error: linkError } = await supabase
+            .from('recipe_ingredients')
+            .insert({
+              recipe_id: recipe.id,
+              ingredient_id: product?.id || null,  // Lier au product si trouvé
+              ingredient_name: ingredientName,      // Nom obligatoire
+              quantity: quantity,
+              unit: unit,
+            })
+          
+          if (linkError) {
+            console.error(`       ❌ Erreur lien:`, linkError)
+          } else {
+            console.log(`       ✓ Lié !`)
           }
         }
       }

@@ -179,44 +179,69 @@ async function handlePreview(
     return NextResponse.json({ error: 'Recette introuvable' }, { status: 404 })
   }
 
-  // Récupérer les ingrédients séparément
-  const ingredientIds = recipe.recipe_ingredients
-    .map((ri: any) => ri.ingredient_id)
-    .filter((id: any) => id !== null)
+  // Récupérer les stocks correspondants aux ingrédients de la recette
+  const ingredientNames = recipe.recipe_ingredients.map((ri: any) => ri.ingredient_name)
   
-  const { data: ingredients } = await supabase
-    .from('ingredients')
-    .select('id, name, unit, current_stock')
-    .in('id', ingredientIds)
+  console.log('[Preview] Looking for products with names:', ingredientNames)
+  
+  const { data: stocks, error: stocksError } = await supabase
+    .from('stock')
+    .select(`
+      id,
+      product_id,
+      quantity,
+      product:product_id (
+        id,
+        name,
+        unit
+      )
+    `)
     .eq('user_id', userId)
   
-  const ingredientsMap = new Map(ingredients?.map((ing: any) => [ing.id, ing]) || [])
+  console.log('[Preview] Found stocks:', stocks?.length || 0)
+  
+  if (stocksError) {
+    console.error('[Preview] Error fetching stocks:', stocksError)
+  }
+  
+  // Créer une map par nom de produit (insensible à la casse)
+  const stocksMap = new Map(
+    (stocks || []).map((s: any) => [
+      s.product.name.toLowerCase().trim(),
+      s
+    ])
+  )
 
   // Calculer les impacts pour chaque ingrédient
   const calculated_impacts: CalculatedIngredientImpact[] = recipe.recipe_ingredients
-    .filter((ri: any) => ri.ingredient_id !== null)
     .map((ri: any) => {
-      const ingredient: any = {
-        id: ri.ingredient_id,
-        name: ri.ingredient_name,
-        unit: ri.unit,
-        current_stock: 0
+      // Chercher le stock par nom de produit
+      const stockKey = ri.ingredient_name.toLowerCase().trim()
+      const stock: any = stocksMap.get(stockKey)
+      
+      if (!stock) {
+        console.warn(`[Preview] Stock not found for product: ${ri.ingredient_name}`)
+        return null
       }
+      
+      console.log(`[Preview] Found stock for ${stock.product.name}: current quantity = ${stock.quantity}`)
+      
       const quantity_per_portion = ri.quantity / (recipe.servings || 1)
       const quantity_needed = quantity_per_portion * portions
-      const current_stock = ingredient.current_stock || 0
+      const current_stock = stock.quantity || 0
       const stock_after = current_stock - quantity_needed
 
       return {
-        ingredient_id: ingredient.id,
-        ingredient_name: ingredient.name,
+        ingredient_id: stock.product_id,
+        ingredient_name: stock.product.name,
         quantity_needed: Math.round(quantity_needed * 100) / 100,
-        unit: ingredient.unit,
+        unit: stock.product.unit,
         current_stock: Math.round(current_stock * 100) / 100,
         stock_after: Math.round(stock_after * 100) / 100,
         is_sufficient: stock_after >= 0
       }
     })
+    .filter((impact): impact is CalculatedIngredientImpact => impact !== null)
 
   const has_insufficient_stock = calculated_impacts.some(impact => !impact.is_sufficient)
 

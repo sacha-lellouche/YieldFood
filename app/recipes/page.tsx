@@ -7,7 +7,7 @@ import { RecipeWithCount } from '@/types/recipe'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, ChefHat, Trash2, Eye, Clock, Users, Package, Upload } from 'lucide-react'
+import { Plus, Search, ChefHat, Trash2, Eye, Clock, Users, Package, Upload, Sparkles } from 'lucide-react'
 import Link from 'next/link'
 import MenuUploadDialog from '@/components/MenuUploadDialog'
 
@@ -18,6 +18,7 @@ export default function RecipesPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showMenuUpload, setShowMenuUpload] = useState(false)
+  const [cleaningUp, setCleaningUp] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -74,6 +75,33 @@ export default function RecipesPage() {
     }
   }
 
+  const handleCleanupDuplicates = async () => {
+    if (!confirm('Supprimer automatiquement les recettes en double avec 0 ingrédients ?')) {
+      return
+    }
+
+    try {
+      setCleaningUp(true)
+      const response = await fetch('/api/recipes/cleanup-duplicates', {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        alert(result.message)
+        fetchRecipes() // Recharger la liste
+      } else {
+        const error = await response.json()
+        alert(`Erreur: ${error.error}`)
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors du nettoyage')
+    } finally {
+      setCleaningUp(false)
+    }
+  }
+
   const formatTime = (minutes: number | null) => {
     if (!minutes) return '-'
     if (minutes < 60) return `${minutes} min`
@@ -108,7 +136,16 @@ export default function RecipesPage() {
                     Créez et gérez vos recettes avec suggestion d'ingrédients par IA
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                  <Button 
+                    variant="outline" 
+                    className="border-purple-600 text-purple-600 hover:bg-purple-50"
+                    onClick={handleCleanupDuplicates}
+                    disabled={cleaningUp}
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    {cleaningUp ? 'Nettoyage...' : 'Nettoyer les doublons'}
+                  </Button>
                   <Button 
                     variant="outline" 
                     className="border-green-600 text-green-600 hover:bg-green-50"

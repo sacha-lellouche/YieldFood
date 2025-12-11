@@ -189,11 +189,17 @@ export default function MenuUploadDialog({ open, onOpenChange, onSuccess }: Menu
                       )}
                       {dish.ingredients && dish.ingredients.length > 0 && (
                         <div className="flex flex-wrap gap-1">
-                          {dish.ingredients.map((ingredient, i) => (
-                            <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                              {ingredient}
-                            </span>
-                          ))}
+                          {dish.ingredients.map((ingredient, i) => {
+                            // Support des anciens formats (string) et nouveaux formats (objet)
+                            const displayText = typeof ingredient === 'string' 
+                              ? ingredient 
+                              : `${ingredient.name} (${ingredient.quantity} ${ingredient.unit})`
+                            return (
+                              <span key={i} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                                {displayText}
+                              </span>
+                            )
+                          })}
                         </div>
                       )}
                     </div>

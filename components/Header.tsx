@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -20,49 +21,57 @@ export default function Header() {
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center h-20">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🍽️</span>
-            <span className="text-xl font-bold text-green-600">YieldFood</span>
+            <div className="relative w-14 h-14 flex-shrink-0">
+              <Image 
+                src="/logo.png" 
+                alt="YieldFood Logo" 
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+            <span className="text-lg font-bold text-green-600 hidden sm:inline">YieldFood</span>
           </Link>
 
           {/* Navigation */}
-          <nav className="hidden md:flex items-center gap-6">
+          <nav className="hidden lg:flex items-center gap-8">
             <Link
               href="/"
-              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+              className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors font-medium"
             >
-              <Home className="h-4 w-4" />
-              Accueil
+              <Home className="h-5 w-5" />
+              <span>Accueil</span>
             </Link>
             <Link
               href="/stocks"
-              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+              className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors font-medium"
             >
-              <Package className="h-4 w-4" />
-              Mes Stocks
+              <Package className="h-5 w-5" />
+              <span>Mes Stocks</span>
             </Link>
             <Link
               href="/recipes"
-              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+              className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors font-medium"
             >
-              <ChefHat className="h-4 w-4" />
-              Mes Recettes
+              <ChefHat className="h-5 w-5" />
+              <span>Mes Recettes</span>
             </Link>
             <Link
               href="/suppliers"
-              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+              className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors font-medium"
             >
-              <Store className="h-4 w-4" />
-              Mes Fournisseurs
+              <Store className="h-5 w-5" />
+              <span>Mes Fournisseurs</span>
             </Link>
             <Link
               href="/consommations"
-              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+              className="flex items-center gap-2 text-gray-700 hover:text-green-600 transition-colors font-medium"
             >
-              <TrendingDown className="h-4 w-4" />
-              Mes Consommations
+              <TrendingDown className="h-5 w-5" />
+              <span>Mes Consommations</span>
             </Link>
           </nav>
 
@@ -84,42 +93,44 @@ export default function Header() {
         </div>
 
         {/* Mobile navigation */}
-        <nav className="md:hidden flex items-center gap-4 pb-3">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
-          >
-            <Home className="h-4 w-4" />
-            Accueil
-          </Link>
-          <Link
-            href="/stocks"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
-          >
-            <Package className="h-4 w-4" />
-            Mes Stocks
-          </Link>
-          <Link
-            href="/recipes"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
-          >
-            <ChefHat className="h-4 w-4" />
-            Recettes
-          </Link>
-          <Link
-            href="/suppliers"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
-          >
-            <Store className="h-4 w-4" />
-            Fournisseurs
-          </Link>
-          <Link
-            href="/consommations"
-            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
-          >
-            <TrendingDown className="h-4 w-4" />
-            Consommations
-          </Link>
+        <nav className="lg:hidden border-t border-gray-100 mt-3 pt-3 pb-3">
+          <div className="flex items-center gap-6 overflow-x-auto">
+            <Link
+              href="/"
+              className="flex flex-col items-center gap-1 text-gray-700 hover:text-green-600 transition-colors min-w-fit"
+            >
+              <Home className="h-5 w-5" />
+              <span className="text-xs font-medium">Accueil</span>
+            </Link>
+            <Link
+              href="/stocks"
+              className="flex flex-col items-center gap-1 text-gray-700 hover:text-green-600 transition-colors min-w-fit"
+            >
+              <Package className="h-5 w-5" />
+              <span className="text-xs font-medium">Stocks</span>
+            </Link>
+            <Link
+              href="/recipes"
+              className="flex flex-col items-center gap-1 text-gray-700 hover:text-green-600 transition-colors min-w-fit"
+            >
+              <ChefHat className="h-5 w-5" />
+              <span className="text-xs font-medium">Recettes</span>
+            </Link>
+            <Link
+              href="/suppliers"
+              className="flex flex-col items-center gap-1 text-gray-700 hover:text-green-600 transition-colors min-w-fit"
+            >
+              <Store className="h-5 w-5" />
+              <span className="text-xs font-medium">Fournisseurs</span>
+            </Link>
+            <Link
+              href="/consommations"
+              className="flex flex-col items-center gap-1 text-gray-700 hover:text-green-600 transition-colors min-w-fit"
+            >
+              <TrendingDown className="h-5 w-5" />
+              <span className="text-xs font-medium">Consommations</span>
+            </Link>
+          </div>
         </nav>
       </div>
     </header>

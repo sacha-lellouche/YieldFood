@@ -7,8 +7,9 @@ import { RecipeWithCount } from '@/types/recipe'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Plus, Search, ChefHat, Trash2, Eye, Clock, Users, Package } from 'lucide-react'
+import { Plus, Search, ChefHat, Trash2, Eye, Clock, Users, Package, Upload } from 'lucide-react'
 import Link from 'next/link'
+import MenuUploadDialog from '@/components/MenuUploadDialog'
 
 export default function RecipesPage() {
   const { user, loading: authLoading } = useAuth()
@@ -16,6 +17,7 @@ export default function RecipesPage() {
   const [recipes, setRecipes] = useState<RecipeWithCount[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [showMenuUpload, setShowMenuUpload] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -106,15 +108,33 @@ export default function RecipesPage() {
                     Créez et gérez vos recettes avec suggestion d'ingrédients par IA
                   </CardDescription>
                 </div>
-                <Link href="/recipes/new">
-                  <Button className="bg-green-600 hover:bg-green-700">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Créer une recette
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="border-green-600 text-green-600 hover:bg-green-50"
+                    onClick={() => {
+                      console.log('Bouton cliqué, ouverture du dialog')
+                      setShowMenuUpload(true)
+                    }}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Uploader ma carte
                   </Button>
-                </Link>
+                  <Link href="/recipes/new">
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Créer une recette
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
+              <MenuUploadDialog 
+                open={showMenuUpload}
+                onOpenChange={setShowMenuUpload}
+                onSuccess={fetchRecipes}
+              />
               {/* Barre de recherche */}
               <div className="mb-6">
                 <div className="relative">

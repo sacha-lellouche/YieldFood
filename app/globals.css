@@ -2,20 +2,105 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Palette inspirée des marchés et cuisines professionnelles */
+    --terracotta: 14 55% 45%; /* Terre cuite chaleureuse */
+    --terracotta-light: 14 65% 92%;
+    --terracotta-dark: 14 60% 35%;
+    
+    --olive: 85 25% 35%; /* Olive profond */
+    --olive-light: 85 20% 90%;
+    --olive-dark: 85 30% 25%;
+    
+    --cream: 42 45% 95%; /* Crème douce */
+    --cream-dark: 42 25% 88%;
+    
+    --charcoal: 210 15% 20%; /* Ardoise profonde */
+    --charcoal-light: 210 10% 35%;
+    
+    --sage: 120 15% 65%; /* Sauge naturelle */
+    --paprika: 10 75% 55%; /* Accent épicé */
+    
+    /* Variables sémantiques */
+    --background: 42 45% 98%;
+    --foreground: var(--charcoal);
+    --primary: var(--terracotta);
+    --primary-foreground: 0 0% 100%;
+    --secondary: var(--olive);
+    --accent: var(--paprika);
+    --muted: var(--cream);
+    --border: var(--cream-dark);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-[hsl(var(--border))];
+  }
+  
+  body {
+    @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
+    font-family: var(--font-body), system-ui, sans-serif;
+    font-feature-settings: "liga" 1, "calt" 1;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display), serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  
+  code, pre {
+    font-family: var(--font-mono), monospace;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+  
+  .animate-scale-in {
+    animation: scaleIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

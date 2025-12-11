@@ -61,7 +61,12 @@ export async function POST(request: NextRequest) {
 
       // Pour chaque ingrédient, créer ou récupérer depuis la table product
       if (dish.ingredients && dish.ingredients.length > 0) {
-        for (const ingredientName of dish.ingredients) {
+        for (const ingredient of dish.ingredients) {
+          // Support des anciens formats (string) et nouveaux formats (objet avec quantité)
+          const ingredientName = typeof ingredient === 'string' ? ingredient : ingredient.name
+          const quantity = typeof ingredient === 'string' ? 0.1 : ingredient.quantity
+          const unit = typeof ingredient === 'string' ? 'kg' : ingredient.unit
+          
           // Chercher si le produit existe
           let { data: product } = await supabase
             .from('product')
@@ -77,7 +82,7 @@ export async function POST(request: NextRequest) {
               .insert({
                 user_id: user.id,
                 name: ingredientName,
-                unit: 'kg',
+                unit: unit,
                 category: 'Ingrédients',
               })
               .select()
@@ -86,15 +91,15 @@ export async function POST(request: NextRequest) {
             product = newProduct
           }
 
-          // Lier l'ingrédient à la recette
+          // Lier l'ingrédient à la recette avec les quantités pour 1 personne
           if (product) {
             await supabase
               .from('recipe_ingredients')
               .insert({
                 recipe_id: recipe.id,
                 product_id: product.id,
-                quantity: 0.1, // Quantité par défaut, à ajuster manuellement
-                unit: 'kg',
+                quantity: quantity,
+                unit: unit,
               })
           }
         }

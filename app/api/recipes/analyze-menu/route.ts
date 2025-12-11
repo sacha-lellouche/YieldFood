@@ -53,7 +53,10 @@ Pour chaque plat, fournis:
 - category: "Entrée", "Plat", "Dessert", ou "Cocktail"
 - description: La description si disponible
 - price: Le prix (nombre uniquement, sans symbole €)
-- ingredients: Liste COMPLÈTE des ingrédients BRUTS nécessaires
+- ingredients: Liste avec QUANTITÉS pour 1 PERSONNE
+  * name: nom de l'ingrédient brut
+  * quantity: quantité (nombre décimal)
+  * unit: unité (kg, L, unité, g, ml)
 
 Réponds UNIQUEMENT avec un JSON valide (sans backticks ni formatage markdown):
 {
@@ -63,18 +66,21 @@ Réponds UNIQUEMENT avec un JSON valide (sans backticks ni formatage markdown):
       "category": "string",
       "description": "string",
       "price": number,
-      "ingredients": ["string"]
+      "ingredients": [
+        {
+          "name": "string",
+          "quantity": number,
+          "unit": "string"
+        }
+      ]
     }
   ]
 }
 
-EXEMPLES DE DÉCOMPOSITION:
-- Cheesecake → fromage frais, biscuits, beurre, œufs, sucre, crème
-- Pizza Margherita → pâte à pizza, sauce tomate, mozzarella, basilic, huile d'olive
-- Burger → pain burger, steak haché, salade, tomate, oignon, cornichons
-- Tiramisu → mascarpone, biscuits à la cuillère, café, œufs, sucre, cacao
-- Crème brûlée → crème liquide, jaunes d'œufs, sucre, vanille
-- Salade César → laitue romaine, poulet, parmesan, croûtons, anchois, sauce césar`
+EXEMPLES DE DÉCOMPOSITION AVEC QUANTITÉS (pour 1 personne):
+- Cheesecake → [{"name": "fromage frais", "quantity": 0.15, "unit": "kg"}, {"name": "biscuits", "quantity": 0.05, "unit": "kg"}, {"name": "beurre", "quantity": 0.03, "unit": "kg"}, {"name": "œufs", "quantity": 1, "unit": "unité"}, {"name": "sucre", "quantity": 0.04, "unit": "kg"}]
+- Pizza Margherita → [{"name": "pâte à pizza", "quantity": 0.25, "unit": "kg"}, {"name": "sauce tomate", "quantity": 0.08, "unit": "kg"}, {"name": "mozzarella", "quantity": 0.12, "unit": "kg"}, {"name": "basilic", "quantity": 0.005, "unit": "kg"}]
+- Burger → [{"name": "pain burger", "quantity": 1, "unit": "unité"}, {"name": "steak haché", "quantity": 0.15, "unit": "kg"}, {"name": "salade", "quantity": 0.03, "unit": "kg"}, {"name": "tomate", "quantity": 0.05, "unit": "kg"}]`
             },
             {
               type: 'image_url',
@@ -92,6 +98,7 @@ EXEMPLES DE DÉCOMPOSITION:
     const content = response.choices[0].message.content
     console.log('Réponse OpenAI:', content?.substring(0, 500))
     if (!content) {
+      console.error('OpenAI n\'a pas retourné de contenu')
       return NextResponse.json({ error: 'Aucune réponse de l\'IA' }, { status: 500 })
     }
 
@@ -107,16 +114,19 @@ EXEMPLES DE DÉCOMPOSITION:
     let dishes
     try {
       dishes = JSON.parse(cleanContent)
+      console.log('JSON parsé avec succès:', dishes?.dishes?.length, 'plats détectés')
     } catch (e) {
-      console.error('Erreur parsing JSON:', cleanContent)
-      return NextResponse.json({ error: 'Format de réponse invalide' }, { status: 500 })
+      console.error('Erreur parsing JSON:', e)
+      console.error('Contenu reçu:', cleanContent)
+      return NextResponse.json({ error: 'Format de réponse invalide de l\'IA' }, { status: 500 })
     }
 
     return NextResponse.json(dishes)
   } catch (error: any) {
     console.error('Erreur analyse menu:', error)
+    console.error('Détails:', error.message, error.stack)
     return NextResponse.json(
-      { error: error.message || 'Erreur lors de l\'analyse' },
+      { error: `Erreur analyse: ${error.message || 'Erreur inconnue'}` },
       { status: 500 }
     )
   }

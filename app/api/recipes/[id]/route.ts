@@ -44,10 +44,16 @@ export async function GET(
       )
     }
 
-    // Récupérer les ingrédients
+    // Récupérer les ingrédients avec les noms depuis la table product
     const { data: ingredients, error: ingredientsError } = await supabase
       .from('recipe_ingredients')
-      .select('*')
+      .select(`
+        *,
+        product:product_id (
+          name,
+          unit
+        )
+      `)
       .eq('recipe_id', id)
       .order('created_at', { ascending: true })
 
@@ -59,9 +65,17 @@ export async function GET(
       )
     }
 
+    // Formater les ingrédients pour le frontend
+    const formattedIngredients = ingredients?.map(ing => ({
+      ingredient_id: ing.product_id,
+      ingredient_name: ing.product?.name || 'Ingrédient inconnu',
+      quantity: ing.quantity,
+      unit: ing.unit || ing.product?.unit || 'kg'
+    })) || []
+
     return NextResponse.json({
       ...recipe,
-      ingredients: ingredients || [],
+      ingredients: formattedIngredients,
     })
   } catch (error) {
     console.error('Unexpected error:', error)

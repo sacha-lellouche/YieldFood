@@ -28,13 +28,10 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get('search')
 
-    // Récupérer les recettes avec le nombre d'ingrédients
+    // Récupérer les recettes
     let query = supabase
       .from('recipes')
-      .select(`
-        *,
-        recipe_ingredients (count)
-      `)
+      .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -42,7 +39,7 @@ export async function GET(request: NextRequest) {
       query = query.ilike('name', `%${search}%`)
     }
 
-    const { data, error } = await query
+    const { data: recipes, error } = await query
 
     if (error) {
       console.error('Error fetching recipes:', error)
@@ -52,14 +49,22 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Formater les données
-    const recipes = data.map((recipe: any) => ({
-      ...recipe,
-      ingredient_count: recipe.recipe_ingredients[0]?.count || 0,
-      recipe_ingredients: undefined,
-    }))
+    // Pour chaque recette, compter les ingrédients
+    const recipesWithCount = await Promise.all(
+      recipes.map(async (recipe) => {
+        const { count } = await supabase
+          .from('recipe_ingredients')
+          .select('*', { count: 'exact', head: true })
+          .eq('recipe_id', recipe.id)
+        
+        return {
+          ...recipe,
+          ingredient_count: count || 0,
+        }
+      })
+    )
 
-    return NextResponse.json(recipes)
+    return NextResponse.json(recipesWithCount)
   } catch (error) {
     console.error('Unexpected error:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })

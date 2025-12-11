@@ -47,7 +47,7 @@ export default function SupplierSelect({ value, onChange, disabled = false, supp
   return (
     <Select
       value={value || 'none'}
-      onValueChange={(val) => onChange(val === 'none' ? null : val)}
+      onValueChange={(val: string) => onChange(val === 'none' ? null : val)}
       disabled={disabled || loading}
     >
       <SelectTrigger className="w-full">

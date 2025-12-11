@@ -35,48 +35,83 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Si OpenAI API key est disponible, utiliser OpenAI
-    if (process.env.OPENAI_API_KEY) {
-      try {
-        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
-              {
-                role: 'system',
-                content: 'Tu es un chef cuisinier expert. Tu dois suggérer une liste d\'ingrédients pour une recette. Réponds UNIQUEMENT en JSON avec un tableau "ingredients" contenant des objets avec "name" (string), "quantity" (number), et "unit" (string: kg, g, L, mL, pièce, c. à soupe, c. à café). Sois précis et réaliste.',
-              },
-              {
-                role: 'user',
-                content: `Suggère les ingrédients nécessaires pour : "${recipeName}"${description ? `. Description: ${description}` : ''}${servings ? `. Pour ${servings} personne(s)` : ''}. Donne des quantités réalistes.`,
-              },
-            ],
-            temperature: 0.7,
-            max_tokens: 500,
-          }),
-        })
+    // Utiliser Groq (gratuit et rapide) avec Llama
+    const groqApiKey = process.env.GROQ_API_KEY
+    
+    if (!groqApiKey) {
+      console.error('GROQ_API_KEY not configured')
+      // Fallback to mock if no API key
+      const mockSuggestions = getMockIngredients(recipeName.toLowerCase(), servings || 4)
+      return NextResponse.json({ ingredients: mockSuggestions })
+    }
+    
+    try {
+      const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${groqApiKey}`,
+        },
+        body: JSON.stringify({
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'Tu es un chef cuisinier expert français. Tu dois suggérer une liste d\'ingrédients pour une recette française. Réponds UNIQUEMENT avec un JSON valide contenant un tableau "ingredients" avec des objets ayant "name" (string, nom en français), "quantity" (number, quantité réaliste), et "unit" (string parmi: g, kg, ml, l, pièce, c. à soupe, c. à café). Aucun texte avant ou après le JSON.',
+            },
+            {
+              role: 'user',
+              content: `Recette: "${recipeName}"${description ? `. Description: ${description}` : ''}${servings ? ` pour ${servings} personne(s)` : ' pour 4 personnes'}. Donne les ingrédients avec quantités réalistes.`,
+            },
+          ],
+          temperature: 0.3,
+          max_tokens: 800,
+        }),
+      })
 
-        if (openaiResponse.ok) {
-          const data = await openaiResponse.json()
-          const content = data.choices[0]?.message?.content
+      if (groqResponse.ok) {
+        const data = await groqResponse.json()
+        const content = data.choices[0]?.message?.content
+        
+        try {
+          // Nettoyer le contenu pour extraire uniquement le JSON
+          let jsonContent = content.trim()
           
-          try {
-            const parsed = JSON.parse(content)
-            return NextResponse.json({ ingredients: parsed.ingredients })
-          } catch (e) {
-            console.error('Failed to parse OpenAI response:', content)
-            // Fallback to mock
+          // Supprimer les balises markdown si présentes
+          jsonContent = jsonContent.replace(/```json\n?/g, '').replace(/```\n?/g, '')
+          
+          // Trouver le premier { et le dernier }
+          const firstBrace = jsonContent.indexOf('{')
+          const lastBrace = jsonContent.lastIndexOf('}')
+          
+          if (firstBrace !== -1 && lastBrace !== -1) {
+            jsonContent = jsonContent.substring(firstBrace, lastBrace + 1)
           }
+          
+          const parsed = JSON.parse(jsonContent)
+          
+          if (parsed.ingredients && Array.isArray(parsed.ingredients)) {
+            // Valider et nettoyer les ingrédients
+            const validIngredients = parsed.ingredients
+              .filter((ing: any) => ing.name && ing.quantity && ing.unit)
+              .map((ing: any) => ({
+                name: String(ing.name).trim(),
+                quantity: parseFloat(ing.quantity) || 0,
+                unit: String(ing.unit).toLowerCase()
+              }))
+            
+            if (validIngredients.length > 0) {
+              return NextResponse.json({ ingredients: validIngredients })
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse Groq response:', content)
         }
-      } catch (error) {
-        console.error('OpenAI API error:', error)
-        // Fallback to mock
+      } else {
+        console.error('Groq API error:', await groqResponse.text())
       }
+    } catch (error) {
+      console.error('Groq API error:', error)
     }
 
     // Fallback: Mock intelligent basé sur le nom de la recette

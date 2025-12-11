@@ -1,23 +1,16 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-
-interface Supplier {
-  id: string
-  name: string
-  contact_email?: string
-  contact_phone?: string
-  address?: string
-}
+import { Supplier } from '@/types/supplier'
 
 interface SupplierSelectProps {
-  value?: string
+  value: string | null
   onChange: (supplierId: string | null) => void
   disabled?: boolean
 }
 
-export default function SupplierSelect({ value, onChange, disabled }: SupplierSelectProps) {
+export default function SupplierSelect({ value, onChange, disabled = false }: SupplierSelectProps) {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -33,30 +26,20 @@ export default function SupplierSelect({ value, onChange, disabled }: SupplierSe
         setSuppliers(data)
       }
     } catch (error) {
-      console.error('Error fetching suppliers:', error)
+      console.error('Erreur lors du chargement des fournisseurs:', error)
     } finally {
       setLoading(false)
     }
-  }
-
-  if (loading) {
-    return (
-      <Select disabled>
-        <SelectTrigger className="w-full">
-          <SelectValue placeholder="Chargement..." />
-        </SelectTrigger>
-      </Select>
-    )
   }
 
   return (
     <Select
       value={value || 'none'}
       onValueChange={(val: string) => onChange(val === 'none' ? null : val)}
-      disabled={disabled}
+      disabled={disabled || loading}
     >
       <SelectTrigger className="w-full">
-        <SelectValue placeholder="Sélectionner un fournisseur" />
+        <SelectValue placeholder={loading ? 'Chargement...' : 'Sélectionner un fournisseur'} />
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="none">Aucun fournisseur</SelectItem>

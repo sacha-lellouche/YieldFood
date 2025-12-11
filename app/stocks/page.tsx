@@ -15,8 +15,9 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search, Package, Minus, Filter, ArrowUpDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Package, Minus, Filter, ArrowUpDown, ShoppingCart } from 'lucide-react'
 import { StockDialog } from '@/components/StockDialog'
+import SupplierSelect from '@/components/SupplierSelect'
 import {
   Select,
   SelectContent,
@@ -39,6 +40,7 @@ export default function StocksPage() {
   const [updatingQuantity, setUpdatingQuantity] = useState<string | null>(null)
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
   const [tempQuantity, setTempQuantity] = useState<string>('')
+  const [generatingOrders, setGeneratingOrders] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -196,10 +198,140 @@ export default function StocksPage() {
     setTempQuantity('')
   }
 
-  const getStockStatus = (quantity: number, threshold: number = 5) => {
+  const handleSupplierChange = async (stockId: string, productId: string, supplierId: string | null) => {
+    try {
+      const stock = stocks.find(s => s.id === stockId)
+      if (!stock) return
+
+      const response = await fetch(`/api/stock?id=${stockId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          product_id: productId,
+          quantity: stock.quantity,
+          supplier_id: supplierId 
+        }),
+      })
+
+      if (response.ok) {
+        setStocks(stocks.map((s) =>
+          s.id === stockId ? { ...s, supplier_id: supplierId } : s
+        ))
+      } else {
+        alert('Erreur lors de la mise à jour du fournisseur')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la mise à jour du fournisseur')
+    }
+  }
+
+  const handleGenerateOrders = async () => {
+    setGeneratingOrders(true)
+    try {
+      const response = await fetch('/api/orders/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        throw new Error('Erreur lors de la génération des commandes')
+      }
+
+      const data = await response.json()
+      
+      if (data.ordersCreated === 0) {
+        alert('Aucune commande nécessaire. Tous vos produits ont un stock suffisant ou n\'ont pas de fournisseur associé.')
+      } else {
+        alert(`✅ ${data.ordersCreated} commande(s) créée(s) avec succès !\n\nVos commandes ont été générées pour les produits en rupture de stock.`)
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la création des commandes')
+    } finally {
+      setGeneratingOrders(false)
+    }
+  }
+
+  const getStockStatus = (quantity: number, threshold: number) => {
     if (quantity === 0) return { color: 'text-red-600', label: 'Rupture' }
     if (quantity < threshold) return { color: 'text-orange-600', label: 'Bas' }
     return { color: 'text-green-600', label: 'OK' }
+  }
+
+  // Fonction pour obtenir l'emoji/icône d'un ingrédient
+  const getIngredientEmoji = (name: string, category: string | null) => {
+    const lowerName = name.toLowerCase()
+    
+    // Mapping spécifique par nom d'ingrédient
+    const emojiMap: Record<string, string> = {
+      // Fruits
+      'pomme': '🍎', 'poire': '🍐', 'banane': '🍌', 'orange': '🍊', 
+      'citron': '🍋', 'fraise': '🍓', 'raisin': '🍇', 'pastèque': '🍉',
+      'melon': '🍈', 'cerise': '🍒', 'pêche': '🍑', 'ananas': '🍍',
+      'kiwi': '🥝', 'avocat': '🥑', 'mangue': '🥭', 'noix de coco': '🥥',
+      
+      // Légumes
+      'tomate': '🍅', 'carotte': '🥕', 'brocoli': '🥦', 'salade': '🥬',
+      'laitue': '🥬', 'poivron': '🫑', 'concombre': '🥒', 'aubergine': '🍆',
+      'pomme de terre': '🥔', 'patate': '🥔', 'maïs': '🌽', 'piment': '🌶️',
+      'champignon': '🍄', 'oignon': '🧅', 'ail': '🧄',
+      
+      // Protéines
+      'poulet': '🍗', 'viande': '🥩', 'boeuf': '🥩', 'porc': '🥓',
+      'bacon': '🥓', 'lardons': '🥓', 'jambon': '🥓', 'saucisse': '🌭',
+      'poisson': '🐟', 'saumon': '🐟', 'thon': '🐟', 'crevette': '🦐',
+      'œuf': '🥚', 'oeuf': '🥚', 'œufs': '🥚', 'oeufs': '🥚',
+      
+      // Produits laitiers
+      'lait': '🥛', 'fromage': '🧀', 'beurre': '🧈', 'crème': '🥛',
+      'yaourt': '🥛', 'mozzarella': '🧀', 'parmesan': '🧀', 'emmental': '🧀',
+      
+      // Céréales et pâtes
+      'pain': '🍞', 'baguette': '🥖', 'pâtes': '🍝', 'riz': '🍚',
+      'farine': '🌾', 'blé': '🌾', 'avoine': '🌾', 'quinoa': '🌾',
+      
+      // Sucreries et desserts
+      'gâteau': '🍰', 'chocolat': '🍫', 'cookie': '🍪', 'bonbon': '🍬',
+      'sucre': '🧁', 'miel': '🍯', 'confiture': '🍯',
+      
+      // Boissons
+      'café': '☕', 'thé': '🍵', 'vin': '🍷', 'bière': '🍺',
+      'eau': '💧', 'jus': '🧃', 'soda': '🥤',
+      
+      // Condiments et épices
+      'huile': '🫒', "huile d'olive": '🫒', 'vinaigre': '🧴',
+      'sel': '🧂', 'poivre': '🧂', 'épice': '🌶️', 'herbes': '🌿',
+      'basilic': '🌿', 'persil': '🌿', 'coriandre': '🌿', 'menthe': '🌿',
+      'curry': '🌶️', 'paprika': '🌶️', 'cannelle': '🌰',
+      
+      // Fruits à coque
+      'noix': '🥜', 'noisette': '🌰', 'amande': '🥜', 'cacahuète': '🥜',
+      'pistache': '🥜',
+    }
+    
+    // Chercher une correspondance exacte
+    for (const [key, emoji] of Object.entries(emojiMap)) {
+      if (lowerName.includes(key)) {
+        return emoji
+      }
+    }
+    
+    // Fallback par catégorie
+    if (category) {
+      const lowerCategory = category.toLowerCase()
+      if (lowerCategory.includes('fruit')) return '🍎'
+      if (lowerCategory.includes('légume')) return '🥬'
+      if (lowerCategory.includes('viande') || lowerCategory.includes('poisson')) return '🥩'
+      if (lowerCategory.includes('lait') || lowerCategory.includes('produit laitier')) return '🥛'
+      if (lowerCategory.includes('céréale') || lowerCategory.includes('féculent')) return '🌾'
+      if (lowerCategory.includes('épice') || lowerCategory.includes('condiment')) return '🧂'
+      if (lowerCategory.includes('boisson')) return '🥤'
+      if (lowerCategory.includes('sucre') || lowerCategory.includes('dessert')) return '🍰'
+    }
+    
+    // Emoji par défaut
+    return '🥘'
   }
 
   // Obtenir les catégories uniques
@@ -257,14 +389,34 @@ export default function StocksPage() {
               Gérez votre inventaire de produits
             </p>
           </div>
-          <Button
-            onClick={handleAdd}
-            className="bg-green-600 hover:bg-green-700 text-white"
-            size="lg"
-          >
-            <Plus className="mr-2 h-5 w-5" />
-            Ajouter un produit
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={handleGenerateOrders}
+              disabled={generatingOrders}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              size="lg"
+            >
+              {generatingOrders ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2" />
+                  Génération...
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="mr-2 h-5 w-5" />
+                  Commander produits en rupture
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={handleAdd}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              size="lg"
+            >
+              <Plus className="mr-2 h-5 w-5" />
+              Ajouter un produit
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -479,6 +631,7 @@ export default function StocksPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Produit</TableHead>
+                      <TableHead>Fournisseur</TableHead>
                       <TableHead>Catégorie</TableHead>
                       <TableHead className="text-right">Quantité</TableHead>
                       <TableHead>Unité</TableHead>
@@ -490,10 +643,22 @@ export default function StocksPage() {
                     {filteredAndSortedStocks.map((stock) => {
                       const threshold = stock.product.low_stock_threshold || 5
                       const status = getStockStatus(stock.quantity, threshold)
+                      const emoji = getIngredientEmoji(stock.product.name, stock.product.category)
                       return (
                         <TableRow key={stock.id}>
                           <TableCell className="font-medium">
-                            {stock.product.name}
+                            <div className="flex items-center gap-3">
+                              <span className="text-3xl">{emoji}</span>
+                              <span>{stock.product.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="min-w-[200px]">
+                              <SupplierSelect
+                                value={stock.supplier_id}
+                                onChange={(supplierId) => handleSupplierChange(stock.id, stock.product_id, supplierId)}
+                              />
+                            </div>
                           </TableCell>
                           <TableCell>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">

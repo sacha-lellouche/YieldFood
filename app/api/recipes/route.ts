@@ -155,6 +155,102 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 3. Ajouter les ingrédients manquants dans les stocks avec quantité = 0
+    try {
+      console.log('Starting to add ingredients to stock...')
+      
+      // Récupérer tous les produits existants (partagés entre utilisateurs)
+      const { data: existingProducts, error: productsError } = await supabase
+        .from('product')
+        .select('id, name, unit')
+
+      if (productsError) {
+        console.error('Error fetching products:', productsError)
+      }
+
+      console.log('Existing products:', existingProducts?.length || 0)
+
+      // Récupérer tous les stocks existants de l'utilisateur
+      const { data: existingStocks, error: stocksError } = await supabase
+        .from('stock')
+        .select('product_id')
+        .eq('user_id', user.id)
+
+      if (stocksError) {
+        console.error('Error fetching stocks:', stocksError)
+      }
+
+      console.log('Existing stocks:', existingStocks?.length || 0)
+
+      const stockedProductIds = new Set(
+        existingStocks?.map((s) => s.product_id) || []
+      )
+
+      // Pour chaque ingrédient de la recette
+      for (const ingredient of ingredients) {
+        const ingredientName = (ingredient.ingredient_name || ingredient.name).trim()
+        const ingredientNameLower = ingredientName.toLowerCase()
+
+        console.log(`Processing ingredient: ${ingredientName}`)
+
+        // Trouver le produit existant
+        let productId = existingProducts?.find(
+          (p) => p.name.toLowerCase().trim() === ingredientNameLower
+        )?.id
+
+        if (!productId) {
+          // Créer le produit s'il n'existe pas (produit partagé, pas de user_id)
+          console.log(`Creating new product: ${ingredientName}`)
+          const { data: newProduct, error: productError } = await supabase
+            .from('product')
+            .insert([
+              {
+                name: ingredientName,
+                unit: ingredient.unit,
+                category: null,
+                low_stock_threshold: 5,
+              },
+            ])
+            .select()
+            .single()
+
+          if (productError) {
+            console.error('Error creating product:', productError)
+          } else if (newProduct) {
+            productId = newProduct.id
+            console.log(`Product created with ID: ${productId}`)
+          }
+        } else {
+          console.log(`Product already exists with ID: ${productId}`)
+        }
+
+        // Ajouter au stock si pas déjà présent
+        if (productId && !stockedProductIds.has(productId)) {
+          console.log(`Adding product ${productId} to stock with quantity 0`)
+          const { error: stockError } = await supabase.from('stock').insert([
+            {
+              user_id: user.id,
+              product_id: productId,
+              quantity: 0,
+            },
+          ])
+
+          if (stockError) {
+            console.error('Error adding to stock:', stockError)
+          } else {
+            console.log(`Successfully added to stock`)
+          }
+        } else {
+          console.log(`Product ${productId} already in stock, skipping`)
+        }
+      }
+
+      console.log('Finished adding ingredients to stock')
+    } catch (error) {
+      console.error('Error adding ingredients to stock:', error)
+      // Ne pas bloquer la création de la recette si l'ajout au stock échoue
+    }
+
     return NextResponse.json(
       {
         ...recipe,

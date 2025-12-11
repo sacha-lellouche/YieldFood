@@ -1,0 +1,33 @@
+{
+  "userId": "REMPLACER_PAR_VOTRE_USER_UUID",
+  "validateOnly": false,
+  "allowNegativeStock": true,
+  "sale": {
+    "saleID": 123456,
+    "orderNumber": "ORD-20241120-0001",
+    "createTime": "2024-11-20T12:30:00Z",
+    "orderStatus": "completed",
+    "total": "25.96",
+    "tax": "5.20",
+    "Customer": {
+      "customerID": 789,
+      "firstName": "Jean",
+      "lastName": "Dupont",
+      "email": "jean.dupont@example.com"
+    },
+    "SaleLines": {
+      "SaleLine": [
+        {
+          "lineID": 1,
+          "itemID": 5001,
+          "description": "Panini Végétarien",
+          "sku": "PAN-001",
+          "quantity": 2,
+          "unitPrice": "6.49",
+          "total": "12.98",
+          "tax": "2.60"
+        }
+      ]
+    }
+  }
+}

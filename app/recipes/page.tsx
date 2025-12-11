@@ -175,7 +175,7 @@ export default function RecipesPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4" />
-                            <span>{recipe.servings} personne(s)</span>
+                            <span className="text-green-600 font-medium">Calibré pour 1 personne</span>
                           </div>
                           {(recipe.prep_time || recipe.cook_time) && (
                             <div className="flex items-center gap-2">
@@ -211,21 +211,15 @@ export default function RecipesPage() {
 
               {/* Statistiques */}
               {recipes.length > 0 && (
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                     <p className="text-sm text-green-600 font-medium">Total de recettes</p>
                     <p className="text-2xl font-bold text-green-700">{recipes.length}</p>
                   </div>
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-600 font-medium">Ingrédients différents</p>
+                    <p className="text-sm text-blue-600 font-medium">Ingrédients totaux</p>
                     <p className="text-2xl font-bold text-blue-700">
                       {recipes.reduce((sum, r) => sum + r.ingredient_count, 0)}
-                    </p>
-                  </div>
-                  <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
-                    <p className="text-sm text-purple-600 font-medium">Portions totales</p>
-                    <p className="text-2xl font-bold text-purple-700">
-                      {recipes.reduce((sum, r) => sum + r.servings, 0)}
                     </p>
                   </div>
                 </div>

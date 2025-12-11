@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Package, LogOut, Home, ChefHat } from 'lucide-react'
+import { Package, LogOut, Home, ChefHat, Store, TrendingDown } from 'lucide-react'
 
 export default function Header() {
   const { user, signOut } = useAuth()
@@ -22,7 +22,7 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href="/" className="flex items-center gap-2">
             <span className="text-2xl">🍽️</span>
             <span className="text-xl font-bold text-green-600">YieldFood</span>
           </Link>
@@ -30,11 +30,11 @@ export default function Header() {
           {/* Navigation */}
           <nav className="hidden md:flex items-center gap-6">
             <Link
-              href="/dashboard"
+              href="/"
               className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
             >
               <Home className="h-4 w-4" />
-              Dashboard
+              Accueil
             </Link>
             <Link
               href="/stocks"
@@ -49,6 +49,20 @@ export default function Header() {
             >
               <ChefHat className="h-4 w-4" />
               Mes Recettes
+            </Link>
+            <Link
+              href="/suppliers"
+              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+            >
+              <Store className="h-4 w-4" />
+              Mes Fournisseurs
+            </Link>
+            <Link
+              href="/consommations"
+              className="flex items-center gap-2 text-gray-600 hover:text-green-600 transition-colors"
+            >
+              <TrendingDown className="h-4 w-4" />
+              Mes Consommations
             </Link>
           </nav>
 
@@ -72,11 +86,11 @@ export default function Header() {
         {/* Mobile navigation */}
         <nav className="md:hidden flex items-center gap-4 pb-3">
           <Link
-            href="/dashboard"
+            href="/"
             className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
           >
             <Home className="h-4 w-4" />
-            Dashboard
+            Accueil
           </Link>
           <Link
             href="/stocks"
@@ -91,6 +105,20 @@ export default function Header() {
           >
             <ChefHat className="h-4 w-4" />
             Recettes
+          </Link>
+          <Link
+            href="/suppliers"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
+          >
+            <Store className="h-4 w-4" />
+            Fournisseurs
+          </Link>
+          <Link
+            href="/consommations"
+            className="flex items-center gap-2 text-sm text-gray-600 hover:text-green-600 transition-colors"
+          >
+            <TrendingDown className="h-4 w-4" />
+            Consommations
           </Link>
         </nav>
       </div>

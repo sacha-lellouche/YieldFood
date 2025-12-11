@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
         product_id,
         quantity,
         supplier_id,
+        category_override,
         created_at,
         updated_at,
         product:product_id (
@@ -222,6 +223,8 @@ export async function POST(request: NextRequest) {
         user_id,
         product_id,
         quantity,
+        supplier_id,
+        category_override,
         created_at,
         updated_at,
         product:product_id (
@@ -388,7 +391,7 @@ export async function PUT(request: NextRequest) {
 
     // Récupérer les données du body
     const body = await request.json()
-    const { product_id, quantity, supplier_id } = body
+    const { product_id, quantity, supplier_id, category_override } = body
 
     if (typeof quantity !== 'number' || quantity < 0) {
       return NextResponse.json(
@@ -423,6 +426,11 @@ export async function PUT(request: NextRequest) {
       updateData.supplier_id = supplier_id
     }
 
+    // Ajouter category_override si fourni
+    if (category_override !== undefined) {
+      updateData.category_override = category_override
+    }
+
     // Mettre à jour le stock
     const { data: updatedStock, error: updateError } = await supabase
       .from('stock')
@@ -435,6 +443,7 @@ export async function PUT(request: NextRequest) {
         product_id,
         quantity,
         supplier_id,
+        category_override,
         created_at,
         updated_at,
         product:product_id (

@@ -18,6 +18,7 @@ export interface Stock {
   product_id: string
   quantity: number
   supplier_id: string | null
+  category_override: string | null
   created_at: string
   updated_at: string
 }

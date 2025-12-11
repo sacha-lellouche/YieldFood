@@ -168,3 +168,92 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+
+/**
+ * PUT /api/products?id=xxx
+ * Met à jour un produit existant
+ * Body: { name?: string, unit?: string, category?: string, description?: string, low_stock_threshold?: number }
+ */
+export async function PUT(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+        },
+      }
+    )
+
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: 'Non autorisé' },
+        { status: 401 }
+      )
+    }
+
+    // Récupérer l'ID depuis les query params
+    const searchParams = request.nextUrl.searchParams
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'L\'ID du produit est requis' },
+        { status: 400 }
+      )
+    }
+
+    // Récupérer les données du body
+    const body = await request.json()
+    const { name, unit, category, description, low_stock_threshold } = body
+
+    // Préparer les données de mise à jour
+    const updateData: any = {}
+
+    if (name !== undefined) updateData.name = name.trim()
+    if (unit !== undefined) updateData.unit = unit.trim()
+    if (category !== undefined) updateData.category = category?.trim() || null
+    if (description !== undefined) updateData.description = description?.trim() || null
+    if (low_stock_threshold !== undefined) updateData.low_stock_threshold = low_stock_threshold
+
+    // Si aucune donnée à mettre à jour
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { error: 'Aucune donnée à mettre à jour' },
+        { status: 400 }
+      )
+    }
+
+    // Mettre à jour le produit
+    const { data: updatedProduct, error: updateError } = await supabase
+      .from('product')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (updateError) {
+      console.error('Error updating product:', updateError)
+      return NextResponse.json(
+        { error: 'Erreur lors de la mise à jour du produit' },
+        { status: 500 }
+      )
+    }
+
+    return NextResponse.json(updatedProduct, { status: 200 })
+  } catch (error) {
+    console.error('Unexpected error in PUT /api/products:', error)
+    return NextResponse.json(
+      { error: 'Erreur serveur' },
+      { status: 500 }
+    )
+  }
+}

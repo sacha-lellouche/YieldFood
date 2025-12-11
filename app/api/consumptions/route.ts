@@ -196,7 +196,7 @@ async function handlePreview(
   const calculated_impacts: CalculatedIngredientImpact[] = recipe.recipe_ingredients
     .filter((ri: any) => ri.ingredient_id !== null)
     .map((ri: any) => {
-      const ingredient = ingredientsMap.get(ri.ingredient_id) || {
+      const ingredient: any = {
         id: ri.ingredient_id,
         name: ri.ingredient_name,
         unit: ri.unit,
@@ -240,12 +240,15 @@ async function handleConfirm(
   userId: string,
   consumptionInput: ConsumptionInput
 ): Promise<NextResponse> {
-  const { recipe_id, portions, consumption_type, consumption_date, notes } = consumptionInput
+  const { recipe_id, portions, consumption_type, consumption_date, notes, name, batch_id } = consumptionInput
 
   // Valider les données
   if (!recipe_id || !portions || portions <= 0 || !consumption_type) {
     return NextResponse.json({ error: 'Données invalides' }, { status: 400 })
   }
+
+  // Générer un nom par défaut si non fourni
+  const consumptionName = name || `Consommation du ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`
 
   // Récupérer la recette avec ses ingrédients
   const { data: recipe, error: recipeError } = await supabase
@@ -278,26 +281,39 @@ async function handleConfirm(
     quantity: ri.quantity
   })))
 
-  // Récupérer les ingrédients séparément
-  const ingredientIds = recipe.recipe_ingredients
-    .map((ri: any) => ri.ingredient_id)
-    .filter((id: any) => id !== null)
+  // Récupérer les stocks correspondants aux ingrédients de la recette
+  // On va chercher par nom de produit au lieu de ingredient_id
+  const ingredientNames = recipe.recipe_ingredients.map((ri: any) => ri.ingredient_name)
   
-  console.log('Looking for ingredient IDs:', ingredientIds)
+  console.log('Looking for products with names:', ingredientNames)
   
-  const { data: ingredients, error: ingredientsError } = await supabase
-    .from('ingredients')
-    .select('id, name, unit, current_stock')
-    .in('id', ingredientIds)
+  const { data: stocks, error: stocksError } = await supabase
+    .from('stock')
+    .select(`
+      id,
+      product_id,
+      quantity,
+      product:product_id (
+        id,
+        name,
+        unit
+      )
+    `)
     .eq('user_id', userId)
   
-  console.log('Found ingredients:', ingredients?.length || 0)
+  console.log('Found stocks:', stocks?.length || 0)
   
-  if (ingredientsError) {
-    console.error('Error fetching ingredients:', ingredientsError)
+  if (stocksError) {
+    console.error('Error fetching stocks:', stocksError)
   }
   
-  const ingredientsMap = new Map(ingredients?.map((ing: any) => [ing.id, ing]) || [])
+  // Créer une map par nom de produit (insensible à la casse)
+  const stocksMap = new Map(
+    (stocks || []).map((s: any) => [
+      s.product.name.toLowerCase().trim(),
+      s
+    ])
+  )
 
   // Démarrer une transaction (en utilisant plusieurs appels séquentiels)
   // 1. Créer la consommation
@@ -309,7 +325,9 @@ async function handleConfirm(
       consumption_type,
       portions,
       consumption_date: consumption_date || new Date().toISOString().split('T')[0],
-      notes
+      name: consumptionName,
+      notes,
+      batch_id: batch_id || null
     })
     .select()
     .single()
@@ -324,66 +342,51 @@ async function handleConfirm(
   console.log('Processing', recipe.recipe_ingredients.length, 'recipe ingredients for consumption')
   
   for (const ri of recipe.recipe_ingredients) {
-    console.log('Processing ingredient:', ri.ingredient_name, 'ID:', ri.ingredient_id)
+    console.log('Processing ingredient:', ri.ingredient_name)
     
-    if (!ri.ingredient_id) {
-      console.warn(`Skipping ${ri.ingredient_name}: no ingredient_id`)
+    // Chercher le stock par nom de produit
+    const stockKey = ri.ingredient_name.toLowerCase().trim()
+    const stock: any = stocksMap.get(stockKey)
+    
+    if (!stock) {
+      console.warn(`Stock not found for product: ${ri.ingredient_name}`)
       continue
     }
     
-    const ingredient = ingredientsMap.get(ri.ingredient_id)
-    if (!ingredient) {
-      console.warn(`Ingredient ${ri.ingredient_id} (${ri.ingredient_name}) not found in ingredients table`)
-      continue
-    }
-    
-    console.log(`Found ingredient: ${ingredient.name}, current stock: ${ingredient.current_stock}`)
+    console.log(`Found stock for ${stock.product.name}: current quantity = ${stock.quantity}`)
     
     const quantity_per_portion = ri.quantity / (recipe.servings || 1)
     const quantity_needed = quantity_per_portion * portions
-    const current_stock = ingredient.current_stock || 0
+    const current_stock = stock.quantity || 0
     const stock_after = current_stock - quantity_needed
 
     // Mise à jour du stock
     const { error: updateError } = await supabase
-      .from('ingredients')
-      .update({ current_stock: stock_after })
-      .eq('id', ingredient.id)
+      .from('stock')
+      .update({ quantity: Math.max(0, stock_after) }) // Ne pas avoir de stock négatif
+      .eq('id', stock.id)
       .eq('user_id', userId)
 
     if (updateError) {
-      console.error('Error updating ingredient stock:', updateError)
+      console.error('Error updating stock:', updateError)
       // Continuer quand même pour les autres ingrédients
     } else {
-      console.log(`Stock updated for ${ingredient.name}: ${current_stock} -> ${stock_after}`)
+      console.log(`Stock updated for ${stock.product.name}: ${current_stock} -> ${Math.max(0, stock_after)}`)
     }
 
-    // Créer l'enregistrement d'impact
-    const { data: impact, error: impactError } = await supabase
-      .from('consumption_ingredient_impacts')
-      .insert({
-        consumption_id: newConsumption.id,
-        ingredient_id: ingredient.id,
-        quantity_consumed: quantity_needed,
-        stock_before: current_stock,
-        stock_after: stock_after
-      })
-      .select()
-      .single()
-
-    if (!impactError && impact) {
-      console.log('Impact created for', ingredient.name)
-      impacts.push({
-        ...impact,
-        ingredient_name: ingredient.name,
-        unit: ingredient.unit
-      })
-    } else {
-      console.error('Error creating impact:', impactError)
-    }
+    // Créer l'enregistrement d'impact (même si pas de table consumption_ingredient_impacts liée aux stocks)
+    // On stocke juste pour l'historique
+    impacts.push({
+      product_id: stock.product_id,
+      product_name: stock.product.name,
+      quantity_consumed: quantity_needed,
+      unit: stock.product.unit,
+      stock_before: current_stock,
+      stock_after: Math.max(0, stock_after)
+    })
   }
   
-  console.log('Total impacts created:', impacts.length)
+  console.log('Total stocks updated:', impacts.length)
 
   // Retourner la consommation créée avec ses impacts
   const result: ConsumptionWithDetails = {
@@ -397,4 +400,63 @@ async function handleConfirm(
   }
 
   return NextResponse.json(result, { status: 201 })
+}
+
+// PUT /api/consumptions?id=xxx - Mettre à jour une consommation (nom)
+export async function PUT(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value
+          },
+        },
+      }
+    )
+    
+    // Vérifier l'authentification
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Non authentifié' }, { status: 401 })
+    }
+
+    // Récupérer l'ID depuis les query params
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
+
+    if (!id) {
+      return NextResponse.json({ error: 'ID requis' }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const { name } = body
+
+    if (!name || typeof name !== 'string') {
+      return NextResponse.json({ error: 'Nom invalide' }, { status: 400 })
+    }
+
+    // Mettre à jour le nom de la consommation
+    const { data: updatedConsumption, error: updateError } = await supabase
+      .from('consumptions')
+      .update({ name: name.trim() })
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single()
+
+    if (updateError || !updatedConsumption) {
+      console.error('Error updating consumption:', updateError)
+      return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 500 })
+    }
+
+    return NextResponse.json(updatedConsumption)
+  } catch (error) {
+    console.error('Unexpected error in PUT /api/consumptions:', error)
+    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
+  }
 }

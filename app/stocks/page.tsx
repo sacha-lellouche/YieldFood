@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { StockWithProduct } from '@/types/stock'
+import { Supplier } from '@/types/supplier'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,7 +16,7 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table'
-import { Plus, Pencil, Trash2, Search, Package, Minus, Filter, ArrowUpDown, ShoppingCart } from 'lucide-react'
+import { Plus, Pencil, Trash2, Search, Package, Minus, Filter, ArrowUpDown, ShoppingCart, ChevronDown, ChevronRight, TrendingDown, X } from 'lucide-react'
 import { StockDialog } from '@/components/StockDialog'
 import SupplierSelect from '@/components/SupplierSelect'
 import {
@@ -25,15 +26,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 export default function StocksPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   const [stocks, setStocks] = useState<StockWithProduct[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category'>('name')
+  const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category'>('category')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingStock, setEditingStock] = useState<StockWithProduct | null>(null)
@@ -41,6 +50,12 @@ export default function StocksPage() {
   const [editingQuantityId, setEditingQuantityId] = useState<string | null>(null)
   const [tempQuantity, setTempQuantity] = useState<string>('')
   const [generatingOrders, setGeneratingOrders] = useState(false)
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
+  const [tempCategory, setTempCategory] = useState<string>('')
+  const [showConsumptionSummary, setShowConsumptionSummary] = useState(false)
+  const [consumptionSummary, setConsumptionSummary] = useState<any>(null)
+  const [loadingSummary, setLoadingSummary] = useState(false)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -51,8 +66,41 @@ export default function StocksPage() {
   useEffect(() => {
     if (user) {
       fetchStocks()
+      fetchSuppliers()
+      fetchConsumptionSummary()
     }
   }, [user])
+
+  const fetchSuppliers = async () => {
+    try {
+      const response = await fetch('/api/suppliers')
+      if (response.ok) {
+        const data = await response.json()
+        setSuppliers(data)
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement des fournisseurs:', error)
+    }
+  }
+
+  const fetchConsumptionSummary = async () => {
+    try {
+      setLoadingSummary(true)
+      const response = await fetch('/api/consumptions/summary')
+      if (response.ok) {
+        const data = await response.json()
+        setConsumptionSummary(data)
+        // Afficher automatiquement le dialogue s'il y a des consommations
+        if (data.totalDishes > 0) {
+          setShowConsumptionSummary(true)
+        }
+      }
+    } catch (error) {
+      console.error('Erreur lors du chargement du récapitulatif:', error)
+    } finally {
+      setLoadingSummary(false)
+    }
+  }
 
   const fetchStocks = async () => {
     try {
@@ -198,6 +246,73 @@ export default function StocksPage() {
     setTempQuantity('')
   }
 
+  const toggleCategory = (category: string) => {
+    const newCollapsed = new Set(collapsedCategories)
+    if (newCollapsed.has(category)) {
+      newCollapsed.delete(category)
+    } else {
+      newCollapsed.add(category)
+    }
+    setCollapsedCategories(newCollapsed)
+  }
+
+  const handleCategoryEdit = (stock: StockWithProduct) => {
+    setEditingCategoryId(stock.id)
+    // Utiliser category_override si défini, sinon product.category
+    setTempCategory(stock.category_override || stock.product.category || '')
+  }
+
+  const handleCategoryChange = (value: string) => {
+    setTempCategory(value)
+  }
+
+  const handleCategorySave = async (stock: StockWithProduct) => {
+    try {
+      console.log('Saving category override for stock:', stock.id, 'Category:', tempCategory)
+      const response = await fetch(`/api/stock?id=${stock.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          product_id: stock.product_id,
+          quantity: stock.quantity,
+          category_override: tempCategory || null
+        }),
+      })
+
+      console.log('Response status:', response.status)
+      const data = await response.json()
+      console.log('Response data:', data)
+
+      if (response.ok) {
+        setStocks(stocks.map((s) =>
+          s.id === stock.id ? { ...s, category_override: tempCategory || null } : s
+        ))
+        setEditingCategoryId(null)
+        setTempCategory('')
+      } else {
+        console.error('Error response:', data)
+        alert(`Erreur lors de la mise à jour de la catégorie: ${data.error || 'Erreur inconnue'}`)
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la mise à jour de la catégorie')
+    }
+  }
+
+  const handleCategoryCancel = () => {
+    setEditingCategoryId(null)
+    setTempCategory('')
+  }
+
+  const capitalizeCategory = (category: string | null) => {
+    if (!category) return 'Non catégorisé'
+    return category.charAt(0).toUpperCase() + category.slice(1)
+  }
+
+  const getEffectiveCategory = (stock: StockWithProduct) => {
+    return stock.category_override || stock.product.category
+  }
+
   const handleSupplierChange = async (stockId: string, productId: string, supplierId: string | null) => {
     try {
       const stock = stocks.find(s => s.id === stockId)
@@ -259,83 +374,8 @@ export default function StocksPage() {
     return { color: 'text-green-600', label: 'OK' }
   }
 
-  // Fonction pour obtenir l'emoji/icône d'un ingrédient
-  const getIngredientEmoji = (name: string, category: string | null) => {
-    const lowerName = name.toLowerCase()
-    
-    // Mapping spécifique par nom d'ingrédient
-    const emojiMap: Record<string, string> = {
-      // Fruits
-      'pomme': '🍎', 'poire': '🍐', 'banane': '🍌', 'orange': '🍊', 
-      'citron': '🍋', 'fraise': '🍓', 'raisin': '🍇', 'pastèque': '🍉',
-      'melon': '🍈', 'cerise': '🍒', 'pêche': '🍑', 'ananas': '🍍',
-      'kiwi': '🥝', 'avocat': '🥑', 'mangue': '🥭', 'noix de coco': '🥥',
-      
-      // Légumes
-      'tomate': '🍅', 'carotte': '🥕', 'brocoli': '🥦', 'salade': '🥬',
-      'laitue': '🥬', 'poivron': '🫑', 'concombre': '🥒', 'aubergine': '🍆',
-      'pomme de terre': '🥔', 'patate': '🥔', 'maïs': '🌽', 'piment': '🌶️',
-      'champignon': '🍄', 'oignon': '🧅', 'ail': '🧄',
-      
-      // Protéines
-      'poulet': '🍗', 'viande': '🥩', 'boeuf': '🥩', 'porc': '🥓',
-      'bacon': '🥓', 'lardons': '🥓', 'jambon': '🥓', 'saucisse': '🌭',
-      'poisson': '🐟', 'saumon': '🐟', 'thon': '🐟', 'crevette': '🦐',
-      'œuf': '🥚', 'oeuf': '🥚', 'œufs': '🥚', 'oeufs': '🥚',
-      
-      // Produits laitiers
-      'lait': '🥛', 'fromage': '🧀', 'beurre': '🧈', 'crème': '🥛',
-      'yaourt': '🥛', 'mozzarella': '🧀', 'parmesan': '🧀', 'emmental': '🧀',
-      
-      // Céréales et pâtes
-      'pain': '🍞', 'baguette': '🥖', 'pâtes': '🍝', 'riz': '🍚',
-      'farine': '🌾', 'blé': '🌾', 'avoine': '🌾', 'quinoa': '🌾',
-      
-      // Sucreries et desserts
-      'gâteau': '🍰', 'chocolat': '🍫', 'cookie': '🍪', 'bonbon': '🍬',
-      'sucre': '🧁', 'miel': '🍯', 'confiture': '🍯',
-      
-      // Boissons
-      'café': '☕', 'thé': '🍵', 'vin': '🍷', 'bière': '🍺',
-      'eau': '💧', 'jus': '🧃', 'soda': '🥤',
-      
-      // Condiments et épices
-      'huile': '🫒', "huile d'olive": '🫒', 'vinaigre': '🧴',
-      'sel': '🧂', 'poivre': '🧂', 'épice': '🌶️', 'herbes': '🌿',
-      'basilic': '🌿', 'persil': '🌿', 'coriandre': '🌿', 'menthe': '🌿',
-      'curry': '🌶️', 'paprika': '🌶️', 'cannelle': '🌰',
-      
-      // Fruits à coque
-      'noix': '🥜', 'noisette': '🌰', 'amande': '🥜', 'cacahuète': '🥜',
-      'pistache': '🥜',
-    }
-    
-    // Chercher une correspondance exacte
-    for (const [key, emoji] of Object.entries(emojiMap)) {
-      if (lowerName.includes(key)) {
-        return emoji
-      }
-    }
-    
-    // Fallback par catégorie
-    if (category) {
-      const lowerCategory = category.toLowerCase()
-      if (lowerCategory.includes('fruit')) return '🍎'
-      if (lowerCategory.includes('légume')) return '🥬'
-      if (lowerCategory.includes('viande') || lowerCategory.includes('poisson')) return '🥩'
-      if (lowerCategory.includes('lait') || lowerCategory.includes('produit laitier')) return '🥛'
-      if (lowerCategory.includes('céréale') || lowerCategory.includes('féculent')) return '🌾'
-      if (lowerCategory.includes('épice') || lowerCategory.includes('condiment')) return '🧂'
-      if (lowerCategory.includes('boisson')) return '🥤'
-      if (lowerCategory.includes('sucre') || lowerCategory.includes('dessert')) return '🍰'
-    }
-    
-    // Emoji par défaut
-    return '🥘'
-  }
-
-  // Obtenir les catégories uniques
-  const categories = Array.from(new Set(stocks.map(s => s.product.category).filter(Boolean)))
+  // Obtenir les catégories uniques (en utilisant category_override ou product.category)
+  const categories = Array.from(new Set(stocks.map(s => getEffectiveCategory(s)).filter(Boolean)))
 
   // Filtrer et trier les stocks
   const filteredAndSortedStocks = stocks
@@ -345,7 +385,7 @@ export default function StocksPage() {
         return false
       }
       // Filtre par catégorie
-      if (categoryFilter !== 'all' && stock.product.category !== categoryFilter) {
+      if (categoryFilter !== 'all' && getEffectiveCategory(stock) !== categoryFilter) {
         return false
       }
       return true
@@ -361,9 +401,13 @@ export default function StocksPage() {
           comparison = a.quantity - b.quantity
           break
         case 'category':
-          const catA = a.product.category || 'Zzz'
-          const catB = b.product.category || 'Zzz'
+          const catA = getEffectiveCategory(a) || 'Non catégorisé'
+          const catB = getEffectiveCategory(b) || 'Non catégorisé'
+          // Trier par catégorie, puis par nom dans chaque catégorie
           comparison = catA.localeCompare(catB)
+          if (comparison === 0) {
+            comparison = a.product.name.localeCompare(b.product.name)
+          }
           break
       }
       
@@ -390,6 +434,17 @@ export default function StocksPage() {
             </p>
           </div>
           <div className="flex gap-3">
+            {consumptionSummary && consumptionSummary.totalDishes > 0 && (
+              <Button
+                onClick={() => setShowConsumptionSummary(true)}
+                variant="outline"
+                size="lg"
+                className="border-orange-300 text-orange-700 hover:bg-orange-50"
+              >
+                <TrendingDown className="mr-2 h-5 w-5" />
+                Voir les consommations ({consumptionSummary.totalDishes} plat{consumptionSummary.totalDishes > 1 ? 's' : ''})
+              </Button>
+            )}
             <Button
               onClick={handleGenerateOrders}
               disabled={generatingOrders}
@@ -509,7 +564,7 @@ export default function StocksPage() {
                     <SelectItem value="all">Toutes les catégories</SelectItem>
                     {categories.map((cat) => (
                       <SelectItem key={cat} value={cat!}>
-                        {cat}
+                        {capitalizeCategory(cat)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -560,7 +615,7 @@ export default function StocksPage() {
                 )}
                 {categoryFilter !== 'all' && (
                   <span className="px-2 py-1 bg-green-100 text-green-700 rounded">
-                    Catégorie: {categoryFilter}
+                    Catégorie: {capitalizeCategory(categoryFilter)}
                   </span>
                 )}
                 <Button
@@ -640,32 +695,96 @@ export default function StocksPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAndSortedStocks.map((stock) => {
+                    {filteredAndSortedStocks.map((stock, index) => {
                       const threshold = stock.product.low_stock_threshold || 5
                       const status = getStockStatus(stock.quantity, threshold)
-                      const emoji = getIngredientEmoji(stock.product.name, stock.product.category)
+                      const currentCategory = getEffectiveCategory(stock) || 'Non catégorisé'
+                      const prevCategory = index > 0 ? (getEffectiveCategory(filteredAndSortedStocks[index - 1]) || 'Non catégorisé') : null
+                      const isNewCategory = sortBy === 'category' && currentCategory !== prevCategory
+                      const isCategoryCollapsed = collapsedCategories.has(currentCategory)
+                      
                       return (
-                        <TableRow key={stock.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-3">
-                              <span className="text-3xl">{emoji}</span>
-                              <span>{stock.product.name}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="min-w-[200px]">
-                              <SupplierSelect
-                                value={stock.supplier_id}
-                                onChange={(supplierId) => handleSupplierChange(stock.id, stock.product_id, supplierId)}
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {stock.product.category || 'Non catégorisé'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
+                        <>
+                          {isNewCategory && (
+                            <TableRow 
+                              key={`category-${currentCategory}`} 
+                              className="bg-gradient-to-r from-blue-100 to-blue-50 hover:from-blue-200 hover:to-blue-100 cursor-pointer border-t-2 border-blue-300"
+                              onClick={() => toggleCategory(currentCategory)}
+                            >
+                              <TableCell colSpan={7} className="font-bold text-gray-800 py-3">
+                                <div className="flex items-center gap-2">
+                                  {isCategoryCollapsed ? (
+                                    <ChevronRight className="h-5 w-5" />
+                                  ) : (
+                                    <ChevronDown className="h-5 w-5" />
+                                  )}
+                                  <span className="text-base">{capitalizeCategory(currentCategory)}</span>
+                                  <span className="text-sm font-normal text-gray-600 ml-2">
+                                    ({filteredAndSortedStocks.filter(s => (getEffectiveCategory(s) || 'Non catégorisé') === currentCategory).length} produit{filteredAndSortedStocks.filter(s => (getEffectiveCategory(s) || 'Non catégorisé') === currentCategory).length > 1 ? 's' : ''})
+                                  </span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                          {!isCategoryCollapsed && (
+                            <TableRow key={stock.id}>
+                              <TableCell className="font-medium">
+                                {stock.product.name}
+                              </TableCell>
+                              <TableCell>
+                                <div className="min-w-[200px]">
+                                  <SupplierSelect
+                                    value={stock.supplier_id}
+                                    onChange={(supplierId) => handleSupplierChange(stock.id, stock.product_id, supplierId)}
+                                    suppliers={suppliers}
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                {editingCategoryId === stock.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Select value={tempCategory} onValueChange={handleCategoryChange}>
+                                      <SelectTrigger className="w-[180px]">
+                                        <SelectValue placeholder="Choisir une catégorie" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="Légumes">Légumes</SelectItem>
+                                        <SelectItem value="Fruits">Fruits</SelectItem>
+                                        <SelectItem value="Viande & poisson">Viande & poisson</SelectItem>
+                                        <SelectItem value="Produits transformés">Produits transformés</SelectItem>
+                                        <SelectItem value="Produits laitiers">Produits laitiers</SelectItem>
+                                        <SelectItem value="Céréales & féculents">Céréales & féculents</SelectItem>
+                                        <SelectItem value="Épices & condiments">Épices & condiments</SelectItem>
+                                        <SelectItem value="Boissons">Boissons</SelectItem>
+                                        <SelectItem value="Autres">Autres</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleCategorySave(stock)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      ✓
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleCategoryCancel}
+                                    >
+                                      ✕
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleCategoryEdit(stock)}
+                                    className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors cursor-pointer"
+                                    title="Cliquer pour modifier la catégorie"
+                                  >
+                                    {capitalizeCategory(getEffectiveCategory(stock))}
+                                  </button>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-right">
                             {editingQuantityId === stock.id ? (
                               <div className="flex items-center justify-end gap-2">
                                 <Input
@@ -738,6 +857,8 @@ export default function StocksPage() {
                             </div>
                           </TableCell>
                         </TableRow>
+                          )}
+                        </>
                       )
                     })}
                   </TableBody>
@@ -747,6 +868,121 @@ export default function StocksPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialogue de récapitulatif des consommations */}
+      <Dialog open={showConsumptionSummary} onOpenChange={setShowConsumptionSummary}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <TrendingDown className="h-5 w-5 text-orange-600" />
+              Récapitulatif des consommations
+            </DialogTitle>
+            <DialogDescription>
+              {consumptionSummary?.period} - {consumptionSummary?.totalDishes || 0} plat{(consumptionSummary?.totalDishes || 0) > 1 ? 's' : ''} réalisé{(consumptionSummary?.totalDishes || 0) > 1 ? 's' : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingSummary ? (
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Chargement du récapitulatif...</p>
+            </div>
+          ) : consumptionSummary?.productImpacts?.length === 0 ? (
+            <div className="text-center py-12">
+              <Package className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+              <p className="text-gray-500">Aucune consommation récente</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Recipe summary at the top */}
+              {consumptionSummary?.recipeSummary && consumptionSummary.recipeSummary.length > 0 && (
+                <Card className="bg-gradient-to-r from-orange-50 to-red-50 border-orange-200">
+                  <CardContent className="pt-6">
+                    <div className="text-center mb-4">
+                      <div className="text-3xl font-bold text-orange-700 mb-2">
+                        {consumptionSummary.totalDishes} {consumptionSummary.totalDishes > 1 ? 'plats réalisés' : 'plat réalisé'}
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      {consumptionSummary.recipeSummary.map((recipe: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between bg-white/50 rounded-lg px-4 py-2">
+                          <span className="text-lg text-gray-800">{recipe.recipeName}</span>
+                          <span className="text-2xl font-bold text-orange-600">
+                            × {recipe.portions}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Product impacts details */}
+              <div className="pt-2">
+                <h3 className="text-sm font-semibold text-gray-600 mb-3 uppercase tracking-wide">
+                  Détail des ingrédients consommés
+                </h3>
+              </div>
+              
+              {consumptionSummary?.productImpacts?.map((impact: any, index: number) => (
+                <Card key={index}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-lg">{impact.productName}</CardTitle>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-orange-600">
+                          -{impact.totalQuantity.toFixed(2)} {impact.unit}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {impact.consumptions.length} utilisation{impact.consumptions.length > 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {impact.consumptions.map((cons: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm"
+                        >
+                          <div className="flex-1">
+                            <div className="font-medium">{cons.consumptionName}</div>
+                            <div className="text-gray-600 text-xs">
+                              {cons.recipeName} ({cons.portions} portion{cons.portions > 1 ? 's' : ''})
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-mono text-orange-600">
+                              -{cons.quantity.toFixed(2)} {impact.unit}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(cons.date).toLocaleTimeString('fr-FR', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          <div className="flex justify-end pt-4 border-t">
+            <Button onClick={() => {
+              setShowConsumptionSummary(false)
+              // Rafraîchir les stocks après fermeture du récapitulatif
+              fetchStocks()
+            }}>
+              Fermer
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <StockDialog
         open={isDialogOpen}

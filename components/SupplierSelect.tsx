@@ -8,15 +8,27 @@ interface SupplierSelectProps {
   value: string | null
   onChange: (supplierId: string | null) => void
   disabled?: boolean
+  suppliers?: Supplier[] // Accepter les fournisseurs en props (optionnel)
 }
 
-export default function SupplierSelect({ value, onChange, disabled = false }: SupplierSelectProps) {
-  const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [loading, setLoading] = useState(true)
+export default function SupplierSelect({ value, onChange, disabled = false, suppliers: suppliersProp }: SupplierSelectProps) {
+  const [suppliers, setSuppliers] = useState<Supplier[]>(suppliersProp || [])
+  const [loading, setLoading] = useState(!suppliersProp) // Ne charger que si pas de props
 
   useEffect(() => {
-    fetchSuppliers()
-  }, [])
+    // Mettre à jour si les props changent
+    if (suppliersProp) {
+      setSuppliers(suppliersProp)
+      setLoading(false)
+    }
+  }, [suppliersProp])
+
+  useEffect(() => {
+    // Ne faire l'appel API que si les fournisseurs ne sont pas fournis en props
+    if (!suppliersProp) {
+      fetchSuppliers()
+    }
+  }, [suppliersProp])
 
   const fetchSuppliers = async () => {
     try {

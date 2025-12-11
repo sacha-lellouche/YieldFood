@@ -9,6 +9,7 @@ export interface Consumption {
   consumption_type: ConsumptionType
   portions: number
   consumption_date: string // ISO date string
+  name?: string // Nom personnalisé de la consommation
   notes?: string
   created_at: string
   updated_at: string
@@ -42,7 +43,9 @@ export interface ConsumptionInput {
   consumption_type: ConsumptionType
   portions: number
   consumption_date: string
+  name?: string
   notes?: string
+  batch_id?: string
 }
 
 // Pour le calcul des impacts avant confirmation

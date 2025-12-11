@@ -3,55 +3,45 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import type { 
-  ConsumptionWithDetails, 
-  ConsumptionInput, 
-  ConsumptionPreview,
-  ConsumptionType 
-} from '@/types/consumption'
 import type { RecipeWithCount } from '@/types/recipe'
+import type { ConsumptionType, ConsumptionWithDetails } from '@/types/consumption'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Plus, Minus, TrendingDown, Search, ChefHat, Package, Users, Clock, CheckCircle2, AlertTriangle, Loader2, ShoppingCart, History, Zap } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
-import { Plus, TrendingDown, AlertTriangle, CheckCircle2, Search, Calendar, Trash2, Package2, Minus } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export default function ConsommationsPage() {
   const { user, loading: authLoading } = useAuth()
   const router = useRouter()
   
-  // État pour les données
   const [recipes, setRecipes] = useState<RecipeWithCount[]>([])
-  const [consumptions, setConsumptions] = useState<ConsumptionWithDetails[]>([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   
-  // État pour le formulaire
-  const [selectedRecipeId, setSelectedRecipeId] = useState('')
-  const [portions, setPortions] = useState('1')
+  // Onglets
+  const [activeTab, setActiveTab] = useState<'declare' | 'history'>('declare')
+  
+  // Consommations en cours de saisie
+  const [consumptions, setConsumptions] = useState<Map<string, number>>(new Map())
+  
+  // Historique
+  const [history, setHistory] = useState<ConsumptionWithDetails[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  
+  // Édition de nom de consommation
+  const [editingConsumptionId, setEditingConsumptionId] = useState<string | null>(null)
+  const [tempConsumptionName, setTempConsumptionName] = useState('')
+  
+  // Paramètres de validation
   const [consumptionType, setConsumptionType] = useState<ConsumptionType>('sale')
   const [consumptionDate, setConsumptionDate] = useState(new Date().toISOString().split('T')[0])
-  const [notes, setNotes] = useState('')
-  
-  // État pour la prévisualisation
-  const [preview, setPreview] = useState<ConsumptionPreview | null>(null)
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-
-  // État pour les consommations en attente de validation
-  const [pendingConsumptions, setPendingConsumptions] = useState<ConsumptionPreview[]>([])
-  const [showBatchConfirmDialog, setShowBatchConfirmDialog] = useState(false)
-  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
-  const [validationResult, setValidationResult] = useState({ success: 0, total: 0 })
-
-  // Filtres pour la liste
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterType, setFilterType] = useState<string>('all')
-  const [filterStartDate, setFilterStartDate] = useState('')
-  const [filterEndDate, setFilterEndDate] = useState('')
+  const [showValidationDialog, setShowValidationDialog] = useState(false)
+  const [validating, setValidating] = useState(false)
+  const [validationPreview, setValidationPreview] = useState<any[]>([])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -62,192 +52,147 @@ export default function ConsommationsPage() {
   useEffect(() => {
     if (user) {
       fetchRecipes()
-      fetchConsumptions()
+      if (activeTab === 'history') {
+        fetchHistory()
+      }
     }
-  }, [user])
+  }, [user, search, activeTab])
 
   const fetchRecipes = async () => {
     try {
-      const response = await fetch('/api/recipes')
+      setLoading(true)
+      const url = new URL('/api/recipes', window.location.origin)
+      if (search) {
+        url.searchParams.append('search', search)
+      }
+
+      const response = await fetch(url.toString())
       if (response.ok) {
         const data = await response.json()
         setRecipes(data)
       }
     } catch (error) {
       console.error('Erreur lors de la récupération des recettes:', error)
-    }
-  }
-
-  const fetchConsumptions = async () => {
-    try {
-      setLoading(true)
-      const url = new URL('/api/consumptions', window.location.origin)
-      
-      if (filterStartDate) url.searchParams.append('start_date', filterStartDate)
-      if (filterEndDate) url.searchParams.append('end_date', filterEndDate)
-      if (filterType !== 'all') url.searchParams.append('type', filterType)
-
-      const response = await fetch(url.toString())
-      if (response.ok) {
-        const data = await response.json()
-        setConsumptions(data)
-      }
-    } catch (error) {
-      console.error('Erreur lors de la récupération des consommations:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAddToList = async () => {
-    if (!selectedRecipeId || !portions || parseFloat(portions) <= 0) {
-      alert('Veuillez sélectionner une recette et indiquer le nombre de portions')
+  const fetchHistory = async () => {
+    try {
+      setHistoryLoading(true)
+      const response = await fetch('/api/consumptions')
+      if (response.ok) {
+        const data = await response.json()
+        setHistory(data)
+      }
+    } catch (error) {
+      console.error('Erreur lors de la récupération de l\'historique:', error)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  const incrementConsumption = (recipeId: string) => {
+    const newConsumptions = new Map(consumptions)
+    const current = newConsumptions.get(recipeId) || 0
+    newConsumptions.set(recipeId, current + 1)
+    setConsumptions(newConsumptions)
+  }
+
+  const decrementConsumption = (recipeId: string) => {
+    const newConsumptions = new Map(consumptions)
+    const current = newConsumptions.get(recipeId) || 0
+    if (current > 0) {
+      if (current === 1) {
+        newConsumptions.delete(recipeId)
+      } else {
+        newConsumptions.set(recipeId, current - 1)
+      }
+      setConsumptions(newConsumptions)
+    }
+  }
+
+  const setConsumptionValue = (recipeId: string, value: string) => {
+    const numValue = parseInt(value) || 0
+    const newConsumptions = new Map(consumptions)
+    if (numValue > 0) {
+      newConsumptions.set(recipeId, numValue)
+    } else {
+      newConsumptions.delete(recipeId)
+    }
+    setConsumptions(newConsumptions)
+  }
+
+  const getTotalConsumptions = () => {
+    return Array.from(consumptions.values()).reduce((sum, val) => sum + val, 0)
+  }
+
+  const handleValidate = async () => {
+    if (consumptions.size === 0) {
+      alert('Veuillez sélectionner au moins une recette')
       return
     }
 
-    try {
-      setSubmitting(true)
-      
-      const consumptionInput: ConsumptionInput = {
-        recipe_id: selectedRecipeId,
-        consumption_type: consumptionType,
-        portions: parseFloat(portions),
-        consumption_date: consumptionDate,
-        notes: notes || undefined
-      }
-
-      const response = await fetch('/api/consumptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'preview',
-          consumption: consumptionInput
-        })
-      })
-
-      if (response.ok) {
-        const previewData = await response.json()
-        
-        // Ajouter directement aux consommations en attente
-        setPendingConsumptions([...pendingConsumptions, previewData])
-        
-        // Réinitialiser le formulaire pour la prochaine saisie
-        setSelectedRecipeId('')
-        setPortions('1')
-        setNotes('')
-        
-      } else {
-        const errorText = await response.text()
-        let errorMessage = 'Erreur lors du calcul'
-        
-        try {
-          const error = JSON.parse(errorText)
-          errorMessage = error.error || errorMessage
-        } catch {
-          errorMessage = errorText || errorMessage
-        }
-        
-        if (response.status === 401) {
-          errorMessage = 'Session expirée. Veuillez vous reconnecter.'
-          // Rediriger vers la page de connexion
-          setTimeout(() => router.push('/login'), 2000)
-        }
-        
-        console.error('Erreur API:', errorMessage, 'Status:', response.status)
-        alert(errorMessage)
-      }
-    } catch (error) {
-      console.error('Erreur complète:', error)
-      alert(`Erreur lors de l'ajout à la liste: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const incrementPortions = () => {
-    const current = parseFloat(portions) || 0
-    setPortions((current + 1).toString())
-  }
-
-  const decrementPortions = () => {
-    const current = parseFloat(portions) || 0
-    if (current > 1) {
-      setPortions((current - 1).toString())
-    }
-  }
-
-  const handleConfirm = async () => {
-    if (!preview) return
+    setValidating(true)
+    const previews = []
 
     try {
-      setSubmitting(true)
-      
-      const consumptionInput: ConsumptionInput = {
-        recipe_id: preview.recipe_id,
-        consumption_type: preview.consumption_type,
-        portions: preview.portions,
-        consumption_date: preview.consumption_date,
-        notes: notes || undefined
-      }
-
-      const response = await fetch('/api/consumptions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'confirm',
-          consumption: consumptionInput
+      for (const [recipeId, portions] of consumptions.entries()) {
+        const response = await fetch('/api/consumptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'preview',
+            consumption: {
+              recipe_id: recipeId,
+              consumption_type: consumptionType,
+              portions: portions,
+              consumption_date: consumptionDate
+            }
+          })
         })
-      })
 
-      if (response.ok) {
-        // Réinitialiser le formulaire
-        setSelectedRecipeId('')
-        setPortions('1')
-        setNotes('')
-        setConsumptionDate(new Date().toISOString().split('T')[0])
-        setPreview(null)
-        setShowPreviewDialog(false)
-        
-        // Recharger les consommations
-        fetchConsumptions()
-        
-        alert('Consommation enregistrée avec succès !')
-      } else {
-        const error = await response.json()
-        alert(error.error || 'Erreur lors de la création')
+        if (response.ok) {
+          const preview = await response.json()
+          previews.push(preview)
+        } else {
+          throw new Error('Erreur lors du calcul de la prévisualisation')
+        }
       }
+
+      setValidationPreview(previews)
+      setShowValidationDialog(true)
     } catch (error) {
       console.error('Erreur:', error)
-      alert('Erreur lors de la confirmation')
+      alert('Erreur lors de la préparation de la validation')
     } finally {
-      setSubmitting(false)
+      setValidating(false)
     }
   }
 
-  const handleConfirmBatch = async () => {
-    if (pendingConsumptions.length === 0) return
+  const handleConfirmValidation = async () => {
+    setValidating(true)
+    let successCount = 0
+    let errorCount = 0
+
+    // Generate a batch_id for this validation group
+    const batchId = crypto.randomUUID()
 
     try {
-      setSubmitting(true)
-      let successCount = 0
-      let errorCount = 0
-
-      // Confirmer chaque consommation en attente
-      for (const pending of pendingConsumptions) {
-        const consumptionInput: ConsumptionInput = {
-          recipe_id: pending.recipe_id,
-          consumption_type: pending.consumption_type,
-          portions: pending.portions,
-          consumption_date: pending.consumption_date,
-          notes: undefined
-        }
-
+      for (const preview of validationPreview) {
         const response = await fetch('/api/consumptions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'confirm',
-            consumption: consumptionInput
+            consumption: {
+              recipe_id: preview.recipe_id,
+              consumption_type: preview.consumption_type,
+              portions: preview.portions,
+              consumption_date: preview.consumption_date,
+              batch_id: batchId
+            }
           })
         })
 
@@ -258,40 +203,109 @@ export default function ConsommationsPage() {
         }
       }
 
-      // Réinitialiser
-      setPendingConsumptions([])
-      setShowBatchConfirmDialog(false)
+      setShowValidationDialog(false)
       
-      // Recharger les consommations
-      fetchConsumptions()
-      
-      // Afficher le dialog de succès
-      setValidationResult({ success: successCount, total: successCount + errorCount })
-      setShowSuccessDialog(true)
+      if (errorCount === 0) {
+        alert(`✅ ${successCount} consommation(s) enregistrée(s) avec succès !`)
+        setConsumptions(new Map())
+        setConsumptionDate(new Date().toISOString().split('T')[0])
+        fetchHistory()
+      } else {
+        alert(`⚠️ ${successCount} réussie(s), ${errorCount} échouée(s)`)
+      }
     } catch (error) {
       console.error('Erreur:', error)
-      alert('Erreur lors de la validation du lot')
+      alert('Erreur lors de la validation')
     } finally {
-      setSubmitting(false)
+      setValidating(false)
     }
   }
 
-  const handleRemovePending = (index: number) => {
-    setPendingConsumptions(pendingConsumptions.filter((_, i) => i !== index))
+  const formatTime = (minutes: number | null) => {
+    if (!minutes) return '-'
+    if (minutes < 60) return `${minutes} min`
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    return `${hours}h${mins > 0 ? ` ${mins}min` : ''}`
   }
 
-  const filteredConsumptions = consumptions.filter(c => {
-    if (searchTerm && !c.recipe.name.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return false
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('fr-FR', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  }
+
+  const formatDateTime = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const handleEditConsumptionName = (consumption: ConsumptionWithDetails) => {
+    setEditingConsumptionId(consumption.id)
+    setTempConsumptionName(consumption.name || `Consommation du ${formatDateTime(consumption.created_at)}`)
+  }
+
+  const handleSaveConsumptionName = async (consumptionId: string) => {
+    try {
+      const response = await fetch(`/api/consumptions?id=${consumptionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: tempConsumptionName })
+      })
+
+      if (response.ok) {
+        setHistory(history.map(c => 
+          c.id === consumptionId ? { ...c, name: tempConsumptionName } : c
+        ))
+        setEditingConsumptionId(null)
+        setTempConsumptionName('')
+      } else {
+        alert('Erreur lors de la mise à jour du nom')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la mise à jour du nom')
     }
-    return true
-  })
+  }
+
+  const handleCancelEditName = () => {
+    setEditingConsumptionId(null)
+    setTempConsumptionName('')
+  }
+
+  const getConsumptionsByDate = () => {
+    const grouped = new Map<string, ConsumptionWithDetails[]>()
+    
+    history.forEach(consumption => {
+      const date = consumption.consumption_date
+      if (!grouped.has(date)) {
+        grouped.set(date, [])
+      }
+      grouped.get(date)!.push(consumption)
+    })
+    
+    return Array.from(grouped.entries())
+      .map(([date, consumptions]) => ({ date, consumptions }))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }
+
+  // Calculate history summary before any early returns
+  const historyByDate = getConsumptionsByDate()
 
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Chargement...</p>
         </div>
       </div>
@@ -299,581 +313,509 @@ export default function ConsommationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 p-4 md:p-8">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        
-        {/* Titre de la page */}
+        {/* Header */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-3xl font-bold text-green-700 flex items-center gap-2">
-              <TrendingDown className="w-8 h-8" />
-              Mes Consommations
-            </CardTitle>
-            <CardDescription>
-              Enregistrez vos ventes et pertes de recettes, le stock d&apos;ingrédients sera automatiquement mis à jour
-            </CardDescription>
-          </CardHeader>
-        </Card>
-
-        {/* Formulaire de création */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              Nouvelle Consommation
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Sélection de la recette */}
-              <div className="space-y-2">
-                <Label htmlFor="recipe">Recette *</Label>
-                <Select value={selectedRecipeId} onValueChange={setSelectedRecipeId}>
-                  <SelectTrigger id="recipe">
-                    <SelectValue placeholder="Sélectionner une recette" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {recipes.map((recipe) => (
-                      <SelectItem key={recipe.id} value={recipe.id}>
-                        {recipe.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <CardTitle className="text-3xl font-bold text-orange-600 flex items-center gap-2">
+                  <TrendingDown className="h-8 w-8" />
+                  Mes Consommations
+                </CardTitle>
+                <CardDescription className="mt-2">
+                  Déclarez vos ventes et pertes en un clic
+                </CardDescription>
               </div>
-
-              {/* Nombre de portions */}
-              <div className="space-y-2">
-                <Label htmlFor="portions">Nombre de portions *</Label>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={decrementPortions}
-                    disabled={parseFloat(portions) <= 1}
-                  >
-                    -
-                  </Button>
-                  <Input
-                    id="portions"
-                    type="number"
-                    step="1"
-                    min="1"
-                    value={portions}
-                    onChange={(e) => setPortions(e.target.value)}
-                    className="text-center"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={incrementPortions}
-                  >
-                    +
-                  </Button>
-                </div>
-              </div>
-
-              {/* Type de consommation */}
-              <div className="space-y-2">
-                <Label htmlFor="type">Type *</Label>
-                <Select value={consumptionType} onValueChange={(v) => setConsumptionType(v as ConsumptionType)}>
-                  <SelectTrigger id="type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sale">Vente</SelectItem>
-                    <SelectItem value="loss">Perte</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Date */}
-              <div className="space-y-2">
-                <Label htmlFor="date">Date *</Label>
-                <Input
-                  id="date"
-                  type="date"
-                  value={consumptionDate}
-                  onChange={(e) => setConsumptionDate(e.target.value)}
-                />
-              </div>
-
-              {/* Notes (optionnel) */}
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="notes">Notes (optionnel)</Label>
-                <Textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ajouter des commentaires..."
-                  rows={2}
-                />
+              
+              <div className="flex items-center gap-3">
+                <Button
+                  onClick={() => router.push('/integrations')}
+                  variant="outline"
+                  className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                >
+                  <Zap className="mr-2 h-4 w-4" />
+                  Connexions API avec mon logiciel de caisse
+                </Button>
+                
+                {activeTab === 'declare' && getTotalConsumptions() > 0 && (
+                  <div className="flex items-center gap-4">
+                    <div className="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg">
+                      <p className="text-sm font-medium">Total portions</p>
+                      <p className="text-2xl font-bold">{getTotalConsumptions()}</p>
+                    </div>
+                    <Button 
+                      onClick={handleValidate}
+                      disabled={validating}
+                      className="bg-orange-600 hover:bg-orange-700"
+                    >
+                      {validating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Préparation...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="mr-2 h-4 w-4" />
+                          Valider ({consumptions.size})
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mt-4">
-              <Button 
-                onClick={handleAddToList} 
-                disabled={submitting || !selectedRecipeId || !portions}
-                className="w-full md:w-auto"
+            {/* Onglets */}
+            <div className="flex gap-2 mt-4 border-b border-gray-200 pb-2">
+              <Button
+                variant={activeTab === 'declare' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('declare')}
+                className={activeTab === 'declare' ? 'bg-orange-600 hover:bg-orange-700' : ''}
               >
-                {submitting ? 'Ajout en cours...' : 'Ajouter à la liste'}
+                <Plus className="mr-2 h-4 w-4" />
+                Déclarer
+              </Button>
+              <Button
+                variant={activeTab === 'history' ? 'default' : 'ghost'}
+                onClick={() => setActiveTab('history')}
+                className={activeTab === 'history' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+              >
+                <History className="mr-2 h-4 w-4" />
+                Historique
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </CardHeader>
 
-        {/* Tableau des consommations en attente */}
-        {pendingConsumptions.length > 0 && (
-          <Card className="border-2 border-blue-200 bg-blue-50">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Package2 className="w-5 h-5 text-blue-600" />
-                  Consommations en attente ({pendingConsumptions.length})
-                </CardTitle>
-                <Button 
-                  onClick={() => setShowBatchConfirmDialog(true)}
-                  disabled={submitting}
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                >
-                  Valider toutes les consommations
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Recette</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Portions</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Ingrédients</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingConsumptions.map((pending, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">
-                        {pending.recipe_name}
-                      </TableCell>
-                      <TableCell>
-                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          pending.consumption_type === 'sale' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {pending.consumption_type === 'sale' ? 'Vente' : 'Perte'}
-                        </span>
-                      </TableCell>
-                      <TableCell>{pending.portions}</TableCell>
-                      <TableCell>
-                        {new Date(pending.consumption_date).toLocaleDateString('fr-FR')}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm space-y-1">
-                          {pending.calculated_impacts.map((impact, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <span className="font-medium text-gray-700">{impact.ingredient_name}:</span>
-                              <span className="text-gray-600">-{impact.quantity_needed} {impact.unit}</span>
-                              {!impact.is_sufficient && (
-                                <AlertTriangle className="w-3 h-3 text-orange-500" />
-                              )}
-                            </div>
-                          ))}
+          {activeTab === 'declare' && (
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="type">Type</Label>
+                  <Select value={consumptionType} onValueChange={(val: ConsumptionType) => setConsumptionType(val)}>
+                    <SelectTrigger id="type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sale">
+                        <div className="flex items-center gap-2">
+                          <ShoppingCart className="h-4 w-4 text-green-600" />
+                          <span>Vente</span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemovePending(index)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Liste des consommations */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Historique des Consommations</CardTitle>
-            
-            {/* Filtres */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
-              <div className="space-y-2">
-                <Label htmlFor="search">Rechercher</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      </SelectItem>
+                      <SelectItem value="loss">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-600" />
+                          <span>Perte</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date</Label>
                   <Input
-                    id="search"
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Nom de recette..."
-                    className="pl-10"
+                    id="date"
+                    type="date"
+                    value={consumptionDate}
+                    onChange={(e) => setConsumptionDate(e.target.value)}
                   />
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="filterType">Type</Label>
-                <Select value={filterType} onValueChange={(v) => { setFilterType(v); fetchConsumptions(); }}>
-                  <SelectTrigger id="filterType">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Tous</SelectItem>
-                    <SelectItem value="sale">Ventes</SelectItem>
-                    <SelectItem value="loss">Pertes</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="startDate">Date début</Label>
-                <Input
-                  id="startDate"
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => { setFilterStartDate(e.target.value); }}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="endDate">Date fin</Label>
-                <Input
-                  id="endDate"
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => { setFilterEndDate(e.target.value); }}
-                />
-              </div>
-            </div>
-
-            <Button onClick={fetchConsumptions} variant="outline" className="mt-2">
-              Appliquer les filtres
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto mb-2"></div>
-                <p className="text-gray-600">Chargement...</p>
-              </div>
-            ) : filteredConsumptions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                Aucune consommation enregistrée
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Recette</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Portions</TableHead>
-                      <TableHead>Ingrédients impactés</TableHead>
-                      <TableHead>Notes</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredConsumptions.map((consumption) => (
-                      <TableRow key={consumption.id}>
-                        <TableCell>
-                          {new Date(consumption.consumption_date).toLocaleDateString('fr-FR')}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {consumption.recipe.name}
-                        </TableCell>
-                        <TableCell>
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            consumption.consumption_type === 'sale' 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {consumption.consumption_type === 'sale' ? 'Vente' : 'Perte'}
-                          </span>
-                        </TableCell>
-                        <TableCell>{consumption.portions}</TableCell>
-                        <TableCell>
-                          <div className="text-sm text-gray-600">
-                            {consumption.impacts.length} ingrédient(s)
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1 space-y-0.5">
-                            {consumption.impacts.slice(0, 2).map((impact) => (
-                              <div key={impact.id}>
-                                {impact.ingredient_name}: -{impact.quantity_consumed} {impact.unit}
-                              </div>
-                            ))}
-                            {consumption.impacts.length > 2 && (
-                              <div className="text-gray-400">
-                                +{consumption.impacts.length - 2} autre(s)...
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {consumption.notes || '-'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Dialog de prévisualisation */}
-        <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                {preview?.has_insufficient_stock ? (
-                  <>
-                    <AlertTriangle className="w-5 h-5 text-orange-500" />
-                    <span>Attention : Stock insuffisant</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    <span>Prévisualisation des impacts</span>
-                  </>
-                )}
-              </DialogTitle>
-              <DialogDescription>
-                Vérifiez les quantités qui seront déduites du stock avant de confirmer
-              </DialogDescription>
-            </DialogHeader>
-
-            {preview && (
-              <div className="space-y-4">
-                {/* Résumé */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2">Résumé</h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-gray-600">Recette:</span>
-                      <p className="font-medium">{preview.recipe_name}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Portions:</span>
-                      <p className="font-medium">{preview.portions}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Type:</span>
-                      <p className="font-medium">
-                        {preview.consumption_type === 'sale' ? 'Vente' : 'Perte'}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Date:</span>
-                      <p className="font-medium">
-                        {new Date(preview.consumption_date).toLocaleDateString('fr-FR')}
-                      </p>
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="search">Rechercher</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      id="search"
+                      type="text"
+                      placeholder="Rechercher une recette..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          )}
+        </Card>
 
-                {/* Tableau des impacts */}
-                <div>
-                  <h3 className="font-semibold mb-2">Impact sur les ingrédients</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Ingrédient</TableHead>
-                        <TableHead className="text-right">Quantité nécessaire</TableHead>
-                        <TableHead className="text-right">Stock actuel</TableHead>
-                        <TableHead className="text-right">Stock après</TableHead>
-                        <TableHead className="text-center">Statut</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {preview.calculated_impacts.map((impact, idx) => (
-                        <TableRow 
-                          key={idx}
-                          className={!impact.is_sufficient ? 'bg-red-50' : ''}
-                        >
-                          <TableCell className="font-medium">
-                            {impact.ingredient_name}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {impact.quantity_needed} {impact.unit}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {impact.current_stock} {impact.unit}
-                          </TableCell>
-                          <TableCell className="text-right font-medium">
-                            {impact.stock_after} {impact.unit}
-                          </TableCell>
-                          <TableCell className="text-center">
-                            {impact.is_sufficient ? (
-                              <CheckCircle2 className="w-4 h-4 text-green-500 mx-auto" />
-                            ) : (
-                              <AlertTriangle className="w-4 h-4 text-orange-500 mx-auto" />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+        {/* Contenu selon l'onglet */}
+        {activeTab === 'declare' ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Sélectionnez vos recettes</CardTitle>
+              <CardDescription>
+                Utilisez les boutons +/- pour indiquer le nombre de portions consommées
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Chargement des recettes...</p>
                 </div>
+              ) : recipes.length === 0 ? (
+                <div className="text-center py-12">
+                  <ChefHat className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg mb-2">
+                    {search ? 'Aucune recette trouvée' : 'Aucune recette disponible'}
+                  </p>
+                  <p className="text-gray-400 mb-4">
+                    {search ? 'Essayez une autre recherche' : 'Créez d\'abord des recettes'}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {recipes.map((recipe) => {
+                    const quantity = consumptions.get(recipe.id) || 0
+                    const isSelected = quantity > 0
 
-                {/* Avertissement stock insuffisant */}
-                {preview.has_insufficient_stock && (
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <p className="font-semibold text-orange-800">Stock insuffisant</p>
-                        <p className="text-sm text-orange-700 mt-1">
-                          Certains ingrédients ont un stock insuffisant. La consommation sera quand même 
-                          enregistrée mais le stock de ces ingrédients deviendra négatif.
+                    return (
+                      <Card 
+                        key={recipe.id} 
+                        className={`transition-all ${
+                          isSelected 
+                            ? 'ring-2 ring-orange-500 shadow-lg bg-orange-50' 
+                            : 'hover:shadow-lg'
+                        }`}
+                      >
+                        <CardHeader>
+                          <CardTitle className="text-lg">{recipe.name}</CardTitle>
+                          {recipe.description && (
+                            <CardDescription className="line-clamp-2">
+                              {recipe.description}
+                            </CardDescription>
+                          )}
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-3">
+                            <div className="space-y-1 text-sm text-gray-600">
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                <span>{recipe.ingredient_count} ingrédient(s)</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4" />
+                                <span className="text-orange-600 font-medium">1 portion</span>
+                              </div>
+                              {(recipe.prep_time || recipe.cook_time) && (
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-4 w-4" />
+                                  <span className="text-xs">
+                                    {recipe.prep_time && `${formatTime(recipe.prep_time)}`}
+                                    {recipe.prep_time && recipe.cook_time && ' • '}
+                                    {recipe.cook_time && `${formatTime(recipe.cook_time)}`}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex items-center justify-center gap-3 bg-white rounded-lg p-3 border-2 border-gray-200">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => decrementConsumption(recipe.id)}
+                                disabled={quantity === 0}
+                                className="h-10 w-10 rounded-full"
+                              >
+                                <Minus className="h-4 w-4" />
+                              </Button>
+                              
+                              <Input
+                                type="text"
+                                value={quantity}
+                                onChange={(e) => setConsumptionValue(recipe.id, e.target.value)}
+                                className="w-20 text-center text-xl font-bold border-0 focus:ring-2 focus:ring-orange-500"
+                                placeholder="0"
+                              />
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => incrementConsumption(recipe.id)}
+                                className="h-10 w-10 rounded-full bg-orange-600 text-white hover:bg-orange-700 hover:text-white"
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {isSelected && (
+                              <div className="text-center text-sm text-orange-600 font-medium">
+                                ✓ {quantity} portion{quantity > 1 ? 's' : ''} sélectionnée{quantity > 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+
+              {recipes.length > 0 && (
+                <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                    <p className="text-sm text-orange-600 font-medium">Recettes disponibles</p>
+                    <p className="text-2xl font-bold text-orange-700">{recipes.length}</p>
+                  </div>
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-600 font-medium">Recettes sélectionnées</p>
+                    <p className="text-2xl font-bold text-blue-700">{consumptions.size}</p>
+                  </div>
+                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                    <p className="text-sm text-green-600 font-medium">Total portions</p>
+                    <p className="text-2xl font-bold text-green-700">{getTotalConsumptions()}</p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>Historique des consommations</CardTitle>
+              <CardDescription>
+                Détail de toutes vos validations de consommations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {historyLoading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Chargement de l'historique...</p>
+                </div>
+              ) : historyByDate.length === 0 ? (
+                <div className="text-center py-12">
+                  <History className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg mb-2">Aucun historique</p>
+                  <p className="text-gray-400">Commencez par déclarer vos consommations</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {historyByDate.map(({ date, consumptions }) => (
+                    <div key={date} className="space-y-3">
+                      {/* En-tête de date */}
+                      <div className="flex items-center gap-3 pb-2 border-b-2 border-orange-200">
+                        <h3 className="text-lg font-bold text-gray-800">
+                          {formatDate(date)}
+                        </h3>
+                        <span className="text-sm text-gray-500">
+                          ({consumptions.length} validation{consumptions.length > 1 ? 's' : ''})
+                        </span>
+                      </div>
+
+                      {/* Table des consommations pour cette date */}
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nom de la validation</TableHead>
+                            <TableHead>Recette</TableHead>
+                            <TableHead className="text-center">Type</TableHead>
+                            <TableHead className="text-center">Portions</TableHead>
+                            <TableHead className="text-center">Heure</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {consumptions.map((consumption) => (
+                            <TableRow key={consumption.id}>
+                              <TableCell className="font-medium max-w-xs">
+                                {editingConsumptionId === consumption.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={tempConsumptionName}
+                                      onChange={(e) => setTempConsumptionName(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          handleSaveConsumptionName(consumption.id)
+                                        } else if (e.key === 'Escape') {
+                                          handleCancelEditName()
+                                        }
+                                      }}
+                                      className="flex-1"
+                                      autoFocus
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleSaveConsumptionName(consumption.id)}
+                                      className="bg-green-600 hover:bg-green-700"
+                                    >
+                                      ✓
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={handleCancelEditName}
+                                    >
+                                      ✕
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => handleEditConsumptionName(consumption)}
+                                    className="text-left hover:text-orange-600 transition-colors cursor-pointer"
+                                    title="Cliquer pour modifier le nom"
+                                  >
+                                    {consumption.name || `Consommation du ${formatDateTime(consumption.created_at)}`}
+                                  </button>
+                                )}
+                              </TableCell>
+                              <TableCell>{consumption.recipe.name}</TableCell>
+                              <TableCell className="text-center">
+                                {consumption.consumption_type === 'sale' ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                    Vente
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    Perte
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center font-bold">
+                                {consumption.portions}
+                              </TableCell>
+                              <TableCell className="text-center text-sm text-gray-600">
+                                {new Date(consumption.created_at).toLocaleTimeString('fr-FR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ))}
+
+                  {/* Stats globales */}
+                  <div className="mt-8 pt-6 border-t-2 border-gray-200">
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">Statistiques globales</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                        <p className="text-sm text-green-600 font-medium">Total ventes</p>
+                        <p className="text-2xl font-bold text-green-700">
+                          {history.filter(c => c.consumption_type === 'sale').reduce((sum, c) => sum + c.portions, 0)} portions
+                        </p>
+                      </div>
+                      <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                        <p className="text-sm text-red-600 font-medium">Total pertes</p>
+                        <p className="text-2xl font-bold text-red-700">
+                          {history.filter(c => c.consumption_type === 'loss').reduce((sum, c) => sum + c.portions, 0)} portions
+                        </p>
+                      </div>
+                      <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                        <p className="text-sm text-orange-600 font-medium">Total portions</p>
+                        <p className="text-2xl font-bold text-orange-700">
+                          {history.reduce((sum, c) => sum + c.portions, 0)} portions
                         </p>
                       </div>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowPreviewDialog(false)}
-                disabled={submitting}
-              >
-                Annuler
-              </Button>
-              <Button 
-                onClick={handleConfirm}
-                disabled={submitting}
-              >
-                {submitting ? 'Enregistrement...' : 'Valider la consommation'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Dialog de confirmation du lot */}
-        <Dialog open={showBatchConfirmDialog} onOpenChange={setShowBatchConfirmDialog}>
-          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        {/* Dialog de validation */}
+        <Dialog open={showValidationDialog} onOpenChange={setShowValidationDialog}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CheckCircle2 className="w-5 h-5 text-blue-600" />
-                Confirmer la validation du lot
+                <CheckCircle2 className="h-5 w-5 text-orange-600" />
+                Confirmer les consommations
               </DialogTitle>
               <DialogDescription>
-                Vous êtes sur le point de valider {pendingConsumptions.length} consommation(s). 
-                Le stock des ingrédients sera mis à jour automatiquement.
+                Vérifiez les impacts sur vos stocks avant de valider
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
-              {/* Résumé des consommations */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-3">Résumé des consommations</h3>
-                <div className="space-y-2">
-                  {pendingConsumptions.map((pending, index) => (
-                    <div key={index} className="flex items-center justify-between text-sm border-b pb-2">
-                      <div>
-                        <span className="font-medium">{pending.recipe_name}</span>
-                        <span className="text-gray-500 ml-2">
-                          ({pending.portions} portions - {pending.consumption_type === 'sale' ? 'Vente' : 'Perte'})
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {pending.calculated_impacts.length} ingrédient(s)
+              {validationPreview.map((preview, index) => (
+                <Card key={index} className={preview.has_insufficient_stock ? 'border-orange-300' : ''}>
+                  <CardHeader>
+                    <CardTitle className="text-lg flex items-center justify-between">
+                      <span>{preview.recipe_name}</span>
+                      <span className="text-sm font-normal">
+                        {preview.portions} portion{preview.portions > 1 ? 's' : ''}
                       </span>
+                    </CardTitle>
+                    {preview.has_insufficient_stock && (
+                      <div className="flex items-center gap-2 text-orange-600 text-sm">
+                        <AlertTriangle className="h-4 w-4" />
+                        <span>Attention : Stock insuffisant pour certains ingrédients</span>
+                      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {preview.calculated_impacts.map((impact: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className={`flex items-center justify-between p-2 rounded ${
+                            !impact.is_sufficient ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{impact.ingredient_name}</span>
+                            {!impact.is_sufficient && (
+                              <AlertTriangle className="h-3 w-3 text-orange-500" />
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600">
+                            <span className="font-mono">
+                              {impact.current_stock} {impact.unit}
+                            </span>
+                            <span className="mx-2">→</span>
+                            <span className={`font-mono font-bold ${
+                              !impact.is_sufficient ? 'text-orange-600' : 'text-green-600'
+                            }`}>
+                              {impact.stock_after} {impact.unit}
+                            </span>
+                            <span className="ml-2 text-gray-500">
+                              (-{impact.quantity_needed} {impact.unit})
+                            </span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Avertissement stock insuffisant */}
-              {pendingConsumptions.some(p => p.has_insufficient_stock) && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-orange-800">Stock insuffisant détecté</p>
-                      <p className="text-sm text-orange-700 mt-1">
-                        Certaines consommations ont des ingrédients avec un stock insuffisant. 
-                        Les stocks deviendront négatifs après validation.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
 
             <DialogFooter>
               <Button 
                 variant="outline" 
-                onClick={() => setShowBatchConfirmDialog(false)}
-                disabled={submitting}
+                onClick={() => setShowValidationDialog(false)}
+                disabled={validating}
               >
                 Annuler
               </Button>
               <Button 
-                onClick={handleConfirmBatch}
-                disabled={submitting}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleConfirmValidation}
+                disabled={validating}
+                className="bg-orange-600 hover:bg-orange-700"
               >
-                {submitting ? 'Validation en cours...' : `Valider les ${pendingConsumptions.length} consommations`}
+                {validating ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Validation...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                    Confirmer
+                  </>
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
-
-        {/* Dialog de succès */}
-        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-green-700">
-                <CheckCircle2 className="w-6 h-6" />
-                Consommations validées avec succès !
-              </DialogTitle>
-            </DialogHeader>
-
-            <div className="py-6">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 mb-4">
-                  <CheckCircle2 className="w-10 h-10 text-green-600" />
-                </div>
-                <p className="text-lg font-semibold text-gray-900 mb-2">
-                  {validationResult.success} consommation(s) enregistrée(s)
-                </p>
-                <p className="text-sm text-gray-600">
-                  Les stocks d&apos;ingrédients ont été automatiquement mis à jour
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button 
-                onClick={() => setShowSuccessDialog(false)}
-                className="w-full bg-green-600 hover:bg-green-700 text-white"
-              >
-                Parfait !
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
       </div>
     </div>
   )

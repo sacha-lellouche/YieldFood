@@ -65,7 +65,7 @@ export default function AuthForm({ mode = 'login' }: AuthFormProps) {
         if (error) {
           setError(error.message || 'Erreur de connexion');
         } else {
-          router.push('/dashboard');
+          router.push('/');
         }
       } else {
         const { error } = await signUp(email, password);

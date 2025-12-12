@@ -19,6 +19,7 @@ export default function RecipesPage() {
   const [search, setSearch] = useState('')
   const [showMenuUpload, setShowMenuUpload] = useState(false)
   const [cleaningUp, setCleaningUp] = useState(false)
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -110,6 +111,69 @@ export default function RecipesPage() {
     return `${hours}h${mins > 0 ? ` ${mins}min` : ''}`
   }
 
+  // Fonction pour déterminer la catégorie d'une recette basée sur son nom
+  const getCategoryFromName = (name: string): string => {
+    const nameLower = name.toLowerCase()
+    
+    // Entrées
+    if (nameLower.includes('salade') || 
+        nameLower.includes('soupe') || 
+        nameLower.includes('velouté') ||
+        nameLower.includes('entrée') ||
+        nameLower.includes('tartare') ||
+        nameLower.includes('carpaccio') ||
+        nameLower.includes('terrine') ||
+        nameLower.includes('bruschetta')) {
+      return 'entrée'
+    }
+    
+    // Desserts
+    if (nameLower.includes('dessert') || 
+        nameLower.includes('gâteau') || 
+        nameLower.includes('tarte') ||
+        nameLower.includes('mousse') ||
+        nameLower.includes('crème') ||
+        nameLower.includes('tiramisu') ||
+        nameLower.includes('fondant') ||
+        nameLower.includes('brownie') ||
+        nameLower.includes('cookie') ||
+        nameLower.includes('macaron') ||
+        nameLower.includes('éclair') ||
+        nameLower.includes('profiterole') ||
+        nameLower.includes('millefeuille') ||
+        nameLower.includes('cheese') && nameLower.includes('cake') ||
+        nameLower.includes('panna cotta') ||
+        nameLower.includes('île flottante')) {
+      return 'dessert'
+    }
+    
+    // Par défaut: plat
+    return 'plat'
+  }
+
+  // Filtrer et grouper les recettes
+  const getFilteredRecipes = () => {
+    let filtered = recipes.filter(recipe =>
+      recipe.name.toLowerCase().includes(search.toLowerCase()) ||
+      recipe.description?.toLowerCase().includes(search.toLowerCase())
+    )
+
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(recipe => getCategoryFromName(recipe.name) === categoryFilter)
+    }
+
+    // Grouper par catégorie
+    const grouped = {
+      entrée: filtered.filter(r => getCategoryFromName(r.name) === 'entrée'),
+      plat: filtered.filter(r => getCategoryFromName(r.name) === 'plat'),
+      dessert: filtered.filter(r => getCategoryFromName(r.name) === 'dessert')
+    }
+
+    return grouped
+  }
+
+  const groupedRecipes = getFilteredRecipes()
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -172,8 +236,8 @@ export default function RecipesPage() {
                 onOpenChange={setShowMenuUpload}
                 onSuccess={fetchRecipes}
               />
-              {/* Barre de recherche */}
-              <div className="mb-6">
+              {/* Barre de recherche et filtres */}
+              <div className="mb-6 space-y-4">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -183,6 +247,42 @@ export default function RecipesPage() {
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-10"
                   />
+                </div>
+                
+                {/* Filtres par catégorie */}
+                <div className="flex gap-2 flex-wrap">
+                  <Button
+                    variant={categoryFilter === 'all' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCategoryFilter('all')}
+                    className={categoryFilter === 'all' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  >
+                    Toutes ({recipes.length})
+                  </Button>
+                  <Button
+                    variant={categoryFilter === 'entrée' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCategoryFilter('entrée')}
+                    className={categoryFilter === 'entrée' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  >
+                    🥗 Entrées ({groupedRecipes.entrée.length})
+                  </Button>
+                  <Button
+                    variant={categoryFilter === 'plat' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCategoryFilter('plat')}
+                    className={categoryFilter === 'plat' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  >
+                    🍽️ Plats ({groupedRecipes.plat.length})
+                  </Button>
+                  <Button
+                    variant={categoryFilter === 'dessert' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setCategoryFilter('dessert')}
+                    className={categoryFilter === 'dessert' ? 'bg-green-600 hover:bg-green-700' : ''}
+                  >
+                    🍰 Desserts ({groupedRecipes.dessert.length})
+                  </Button>
                 </div>
               </div>
 
@@ -213,72 +313,48 @@ export default function RecipesPage() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {recipes.map((recipe) => (
-                    <Card key={recipe.id} className="hover:shadow-lg transition-shadow">
-                      <CardHeader>
-                        <CardTitle className="text-lg">{recipe.name}</CardTitle>
-                        {recipe.description && (
-                          <CardDescription className="line-clamp-2">
-                            {recipe.description}
-                          </CardDescription>
-                        )}
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2 text-sm text-gray-600 mb-4">
-                          <div className="flex items-center gap-2">
-                            <Package className="h-4 w-4" />
-                            <span>{recipe.ingredient_count} ingrédient(s)</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Users className="h-4 w-4" />
-                            <span className="text-green-600 font-medium">Calibré pour 1 personne</span>
-                          </div>
-                          {(recipe.prep_time || recipe.cook_time) && (
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4" />
-                              <span>
-                                {recipe.prep_time && `Prép: ${formatTime(recipe.prep_time)}`}
-                                {recipe.prep_time && recipe.cook_time && ' • '}
-                                {recipe.cook_time && `Cuisson: ${formatTime(recipe.cook_time)}`}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <Link href={`/recipes/${recipe.id}`} className="flex-1">
-                            <Button variant="outline" size="sm" className="w-full">
-                              <Eye className="h-4 w-4 mr-2" />
-                              Voir
-                            </Button>
-                          </Link>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(recipe.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
+                <div className="space-y-8">
+                  {/* Entrées */}
+                  {groupedRecipes.entrée.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🥗 Entrées <span className="text-sm font-normal text-gray-500">({groupedRecipes.entrée.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.entrée.map((recipe) => (
+                          <RecipeCard key={recipe.id} recipe={recipe} onDelete={handleDelete} formatTime={formatTime} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              {/* Statistiques */}
-              {recipes.length > 0 && (
-                <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                    <p className="text-sm text-green-600 font-medium">Total de recettes</p>
-                    <p className="text-2xl font-bold text-green-700">{recipes.length}</p>
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                    <p className="text-sm text-blue-600 font-medium">Ingrédients totaux</p>
-                    <p className="text-2xl font-bold text-blue-700">
-                      {recipes.reduce((sum, r) => sum + r.ingredient_count, 0)}
-                    </p>
-                  </div>
+                  {/* Plats */}
+                  {groupedRecipes.plat.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🍽️ Plats <span className="text-sm font-normal text-gray-500">({groupedRecipes.plat.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.plat.map((recipe) => (
+                          <RecipeCard key={recipe.id} recipe={recipe} onDelete={handleDelete} formatTime={formatTime} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Desserts */}
+                  {groupedRecipes.dessert.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🍰 Desserts <span className="text-sm font-normal text-gray-500">({groupedRecipes.dessert.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.dessert.map((recipe) => (
+                          <RecipeCard key={recipe.id} recipe={recipe} onDelete={handleDelete} formatTime={formatTime} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -287,3 +363,56 @@ export default function RecipesPage() {
       </div>
     )
   }
+
+// Composant pour une carte de recette
+function RecipeCard({ recipe, onDelete, formatTime }: { recipe: RecipeWithCount, onDelete: (id: string) => void, formatTime: (minutes: number | null) => string }) {
+  return (
+    <Card className="hover:shadow-lg transition-shadow">
+      <CardHeader>
+        <CardTitle className="text-lg">{recipe.name}</CardTitle>
+        {recipe.description && (
+          <CardDescription className="line-clamp-2">
+            {recipe.description}
+          </CardDescription>
+        )}
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2 text-sm text-gray-600 mb-4">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            <span>{recipe.ingredient_count} ingrédient(s)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            <span className="text-green-600 font-medium">Calibré pour 1 personne</span>
+          </div>
+          {(recipe.prep_time || recipe.cook_time) && (
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span>
+                {recipe.prep_time && `Prép: ${formatTime(recipe.prep_time)}`}
+                {recipe.prep_time && recipe.cook_time && ' • '}
+                {recipe.cook_time && `Cuisson: ${formatTime(recipe.cook_time)}`}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Link href={`/recipes/${recipe.id}`} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full">
+              <Eye className="h-4 w-4 mr-2" />
+              Voir
+            </Button>
+          </Link>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => onDelete(recipe.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

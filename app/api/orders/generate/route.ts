@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('User ID for orders:', user.id)
+
     // Récupérer tous les stocks avec les produits et fournisseurs
     const { data: stocks, error: stockError } = await supabase
       .from('stock')
@@ -90,14 +92,12 @@ export async function POST(request: NextRequest) {
         .from('orders')
         .insert({
           user_id: user.id,
-          supplier_id: supplierId,
-          status: 'pending',
           order_date: new Date().toISOString(),
-          notes: `Commande automatique générée pour ${items.length} produit(s) en rupture de stock`,
+          status: 'pending',
         })
         .select()
         .single()
-
+      
       if (orderError || !order) {
         console.error('Error creating order:', orderError)
         continue
@@ -111,7 +111,8 @@ export async function POST(request: NextRequest) {
         return {
           order_id: order.id,
           product_id: stock.product_id,
-          quantity: orderQuantity,
+          product_name: stock.product.name,
+          quantity_ordered: orderQuantity,
           unit: stock.product.unit,
         }
       })

@@ -2,6 +2,93 @@ import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 
+// Fonction pour normaliser le nom d'un ingrédient
+// (minuscule, trim, suppression des 's' finaux pour gérer le pluriel basique)
+function normalizeIngredientName(name: string): string {
+  let normalized = name.toLowerCase().trim()
+  
+  // Gérer les pluriels simples en 's' ou 'x'
+  // Mais garder les mots qui se terminent naturellement par 's' (ex: frais, fois)
+  if (normalized.endsWith('s') && normalized.length > 3 && !normalized.endsWith('ss')) {
+    normalized = normalized.slice(0, -1)
+  }
+  
+  return normalized
+}
+
+// Fonction pour catégoriser automatiquement un ingrédient
+function categorizeIngredient(name: string): string {
+  const nameLower = name.toLowerCase().trim()
+  
+  // Fruits & Légumes
+  if (/tomate|carotte|oignon|poireau|salade|laitue|épinard|courgette|aubergine|poivron|concombre|radis|navet|céleri|fenouil|artichaut|asperge|brocoli|chou|champignon|pomme de terre|patate|courge|potiron|betterave|haricot vert|petit pois|pois|maïs|citron|orange|pomme|poire|banane|fraise|framboise|cerise|pêche|abricot|prune|raisin|melon|pastèque|kiwi|mangue|ananas|avocat|fig|datte|grenade/.test(nameLower)) {
+    return 'Fruits & Légumes'
+  }
+  
+  // Viandes & Volailles
+  if (/bœuf|boeuf|veau|porc|agneau|mouton|poulet|dinde|canard|oie|pintade|lapin|gibier|steak|côte|entrecôte|filet|magret|cuisse|blanc|escalope|rôti|viande|volaille|rumsteak/.test(nameLower)) {
+    return 'Viandes & Volailles'
+  }
+  
+  // Poissons & Fruits de mer
+  if (/poisson|saumon|thon|cabillaud|morue|truite|bar|dorade|sole|merlu|anchois|sardine|maquereau|crevette|gambas|homard|langouste|crabe|moule|huître|coquille|saint-jacques|calmar|poulpe|seiche|escargot/.test(nameLower)) {
+    return 'Poissons & Fruits de mer'
+  }
+  
+  // Produits laitiers
+  if (/lait|crème|beurre|yaourt|yogourt|fromage|mozzarella|parmesan|emmental|comté|gruyère|chèvre|brie|camembert|roquefort|mascarpone|ricotta|feta/.test(nameLower)) {
+    return 'Produits laitiers'
+  }
+  
+  // Féculents & Pâtes
+  if (/pâte|spaghetti|tagliatelle|ravioli|lasagne|riz|semoule|quinoa|boulgour|couscous|vermicelle|nouille/.test(nameLower)) {
+    return 'Féculents & Pâtes'
+  }
+  
+  // Boulangerie & Viennoiserie
+  if (/pain|baguette|brioche|croissant|viennoiserie|toast|tartine|biscuit|cracker/.test(nameLower)) {
+    return 'Boulangerie & Viennoiserie'
+  }
+  
+  // Condiments & Sauces
+  if (/sauce|ketchup|mayonnaise|moutarde|vinaigre|marinade|chutney|pesto|tapenade|cornichon|câpre|olive/.test(nameLower)) {
+    return 'Condiments & Sauces'
+  }
+  
+  // Huiles & Vinaigres
+  if (/huile|vinaigre/.test(nameLower)) {
+    return 'Huiles & Vinaigres'
+  }
+  
+  // Épices & Herbes
+  if (/épice|herbe|sel|poivre|paprika|cumin|curry|safran|cannelle|muscade|gingembre|ail|persil|basilic|thym|romarin|coriandre|menthe|aneth|estragon|laurier|origan/.test(nameLower)) {
+    return 'Épices & Herbes'
+  }
+  
+  // Boissons
+  if (/eau|jus|soda|café|thé|vin|bière|alcool|liqueur|sirop/.test(nameLower)) {
+    return 'Boissons'
+  }
+  
+  // Épicerie salée / sucrée
+  if (/farine|sucre|sel|levure|bicarbonate|chocolat|cacao|miel|confiture|gelée|sirop|vanille|œuf|oeuf/.test(nameLower)) {
+    return 'Épicerie salée / sucrée'
+  }
+  
+  // Surgelés
+  if (/surgelé|congelé|glace/.test(nameLower)) {
+    return 'Surgelés'
+  }
+  
+  // Conserves
+  if (/conserve|boîte|bocal/.test(nameLower)) {
+    return 'Conserves'
+  }
+  
+  // Par défaut
+  return 'Autre'
+}
+
 // GET /api/recipes - Liste toutes les recettes
 export async function GET(request: NextRequest) {
   try {
@@ -194,25 +281,29 @@ export async function POST(request: NextRequest) {
       // Pour chaque ingrédient de la recette
       for (const ingredient of ingredients) {
         const ingredientName = (ingredient.ingredient_name || ingredient.name).trim()
-        const ingredientNameLower = ingredientName.toLowerCase()
+        const normalizedIngredientName = normalizeIngredientName(ingredientName)
 
-        console.log(`Processing ingredient: ${ingredientName}`)
+        console.log(`Processing ingredient: ${ingredientName} (normalized: ${normalizedIngredientName})`)
 
-        // Trouver le produit existant
+        // Trouver le produit existant en comparant les noms normalisés
         let productId = existingProducts?.find(
-          (p) => p.name.toLowerCase().trim() === ingredientNameLower
+          (p) => normalizeIngredientName(p.name) === normalizedIngredientName
         )?.id
 
         if (!productId) {
           // Créer le produit s'il n'existe pas (produit partagé, pas de user_id)
           console.log(`Creating new product: ${ingredientName}`)
+          
+          // Déterminer la catégorie automatiquement
+          const category = categorizeIngredient(ingredientName)
+          
           const { data: newProduct, error: productError } = await supabase
             .from('product')
             .insert([
               {
                 name: ingredientName,
                 unit: ingredient.unit,
-                category: null,
+                category: category,
                 low_stock_threshold: 5,
               },
             ])

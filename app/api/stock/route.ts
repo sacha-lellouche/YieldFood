@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
           description,
           unit,
           category,
+          low_stock_threshold,
           created_at
         )
       `)

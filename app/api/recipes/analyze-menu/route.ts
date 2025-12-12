@@ -92,7 +92,7 @@ EXEMPLES DE DÉCOMPOSITION AVEC QUANTITÉS (pour 1 personne):
         }
       ],
       temperature: 0.3,
-      max_tokens: 4000,
+      max_tokens: 16000,
     })
 
     const content = response.choices[0].message.content

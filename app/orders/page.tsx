@@ -24,6 +24,7 @@ export default function OrdersPage() {
   const [orderPreviews, setOrderPreviews] = useState<OrderPreview[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [lowStockWithoutSupplier, setLowStockWithoutSupplier] = useState<StockWithProduct[]>([])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -51,20 +52,55 @@ export default function OrdersPage() {
       if (!supplierResponse.ok) throw new Error('Erreur lors de la récupération des fournisseurs')
       const suppliers: Supplier[] = await supplierResponse.json()
 
-      // Filtrer les produits en rupture de stock (quantité <= seuil)
-      const lowStockItems = stocks.filter((stock) => {
+      console.log('=== ANALYSE DES STOCKS ===')
+      console.log('Total stocks:', stocks.length)
+      
+      // Filtrer les produits en rupture de stock
+      const allLowStockItems = stocks.filter((stock) => {
         const threshold = stock.product.low_stock_threshold || 5
-        return stock.quantity <= threshold && stock.supplier_id
+        const isLow = stock.quantity < threshold
+        
+        console.log(`${stock.product.name}: quantity=${stock.quantity}, threshold=${threshold}, isLow=${isLow}, has_supplier=${!!stock.supplier_id}`)
+        
+        return isLow
       })
+
+      console.log('Total produits en rupture:', allLowStockItems.length)
+
+      // Séparer ceux avec et sans fournisseur
+      const lowStockItems = allLowStockItems.filter(stock => stock.supplier_id)
+      const lowStockWithoutSup = allLowStockItems.filter(stock => !stock.supplier_id)
+      
+      setLowStockWithoutSupplier(lowStockWithoutSup)
+
+      console.log('✅ Produits en rupture AVEC fournisseur:', lowStockItems.length)
+      console.log('❌ Produits en rupture SANS fournisseur:', lowStockWithoutSup.length)
+      
+      if (lowStockItems.length > 0) {
+        console.log('Détails produits avec fournisseur:', lowStockItems.map(s => ({
+          name: s.product.name,
+          quantity: s.quantity,
+          threshold: s.product.low_stock_threshold || 5,
+          supplier_id: s.supplier_id
+        })))
+      }
 
       // Grouper par fournisseur
       const grouped = new Map<string, OrderPreview>()
+
+      console.log('Début du groupement par fournisseur...')
+      console.log('Nombre de fournisseurs disponibles:', suppliers.length)
 
       lowStockItems.forEach((stock) => {
         if (!stock.supplier_id) return
 
         const supplier = suppliers.find((s) => s.id === stock.supplier_id)
-        if (!supplier) return
+        console.log(`Produit ${stock.product.name} - supplier_id: ${stock.supplier_id} - trouvé: ${!!supplier}`)
+        
+        if (!supplier) {
+          console.warn(`⚠️ Fournisseur non trouvé pour ${stock.product.name} (supplier_id: ${stock.supplier_id})`)
+          return
+        }
 
         if (!grouped.has(stock.supplier_id)) {
           grouped.set(stock.supplier_id, {
@@ -84,7 +120,12 @@ export default function OrdersPage() {
         })
       })
 
-      setOrderPreviews(Array.from(grouped.values()))
+      console.log('Nombre de groupes de fournisseurs créés:', grouped.size)
+      console.log('OrderPreviews:', Array.from(grouped.values()))
+
+      const previews = Array.from(grouped.values())
+      console.log('🎯 Setting orderPreviews with', previews.length, 'items')
+      setOrderPreviews(previews)
     } catch (error) {
       console.error('Erreur:', error)
     } finally {
@@ -173,33 +214,90 @@ export default function OrdersPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600"></div>
           </div>
         ) : orderPreviews.length === 0 ? (
-          <Card>
-            <CardContent className="py-12">
-              <div className="text-center">
-                <Package className="mx-auto h-16 w-16 text-gray-400 mb-4" />
-                <h3 className="text-xl font-medium text-gray-900 mb-2">
-                  Aucune commande nécessaire
-                </h3>
-                <p className="text-gray-600 mb-4">
-                  Tous vos produits ont un stock suffisant ou n'ont pas de fournisseur associé.
-                </p>
-                <div className="flex gap-4 justify-center">
-                  <Button
-                    onClick={() => router.push('/stocks')}
-                    variant="outline"
-                  >
-                    Voir mes stocks
-                  </Button>
-                  <Button
-                    onClick={() => router.push('/suppliers')}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    Gérer mes fournisseurs
-                  </Button>
+          <div className="space-y-6">
+              <Card>
+                <CardContent className="py-12">
+                  <div className="text-center">
+                    <AlertCircle className="mx-auto h-16 w-16 text-orange-500 mb-4" />
+                    <h3 className="text-xl font-medium text-gray-900 mb-2">
+                      Aucune commande automatique possible
+                    </h3>
+                  <p className="text-gray-600 mb-4">
+                    {lowStockWithoutSupplier.length > 0 ? (
+                      <>Vous avez {lowStockWithoutSupplier.length} produit{lowStockWithoutSupplier.length > 1 ? 's' : ''} en rupture sans fournisseur associé.</>
+                    ) : (
+                      <>Tous vos produits ont un stock suffisant.</>
+                    )}
+                  </p>
+                  {lowStockWithoutSupplier.length > 0 && (
+                    <>
+                      <p className="text-sm text-gray-500 mb-6">
+                        💡 Astuce : Dans "Mes Stocks", cliquez sur un produit et associez-lui un fournisseur pour pouvoir générer des commandes automatiques.
+                      </p>
+                      <div className="flex gap-4 justify-center mb-6">
+                        <Button
+                          onClick={() => router.push('/stocks')}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          Associer des fournisseurs
+                        </Button>
+                        <Button
+                          onClick={() => router.push('/suppliers')}
+                          variant="outline"
+                        >
+                          Gérer mes fournisseurs
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Liste des produits en rupture sans fournisseur */}
+            {lowStockWithoutSupplier.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg font-semibold text-orange-600">
+                    Produits en rupture sans fournisseur ({lowStockWithoutSupplier.length})
+                  </CardTitle>
+                  <CardDescription>
+                    Ces produits nécessitent d'être associés à un fournisseur
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    {lowStockWithoutSupplier.map((stock) => {
+                      const threshold = stock.product.low_stock_threshold || 5
+                      return (
+                        <div
+                          key={stock.id}
+                          className="flex items-center justify-between p-3 bg-orange-50 rounded-lg border border-orange-200"
+                        >
+                          <div className="flex items-center gap-3">
+                            <AlertCircle className="h-5 w-5 text-orange-500" />
+                            <div>
+                              <p className="font-medium text-gray-900">{stock.product.name}</p>
+                              <p className="text-sm text-gray-600">
+                                Stock actuel: {stock.quantity} {stock.product.unit} • Seuil: {threshold}
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            onClick={() => router.push('/stocks')}
+                            size="sm"
+                            className="bg-orange-600 hover:bg-orange-700"
+                          >
+                            Associer un fournisseur
+                          </Button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         ) : (
           <div className="space-y-6">
             {/* Résumé */}

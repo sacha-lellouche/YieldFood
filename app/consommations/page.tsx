@@ -21,6 +21,7 @@ export default function ConsommationsPage() {
   const [recipes, setRecipes] = useState<RecipeWithCount[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   
   // Onglets
   const [activeTab, setActiveTab] = useState<'declare' | 'history'>('declare')
@@ -206,10 +207,16 @@ export default function ConsommationsPage() {
       setShowValidationDialog(false)
       
       if (errorCount === 0) {
+        // Définir le flag pour afficher le popup sur la page stocks
+        sessionStorage.setItem('showConsumptionSummary', 'true')
+        
         alert(`✅ ${successCount} consommation(s) enregistrée(s) avec succès !`)
         setConsumptions(new Map())
         setConsumptionDate(new Date().toISOString().split('T')[0])
         fetchHistory()
+        
+        // Rediriger vers la page stocks pour voir l'impact
+        router.push('/stocks')
       } else {
         alert(`⚠️ ${successCount} réussie(s), ${errorCount} échouée(s)`)
       }
@@ -228,6 +235,69 @@ export default function ConsommationsPage() {
     const mins = minutes % 60
     return `${hours}h${mins > 0 ? ` ${mins}min` : ''}`
   }
+
+  // Fonction pour déterminer la catégorie d'une recette basée sur son nom
+  const getCategoryFromName = (name: string): string => {
+    const nameLower = name.toLowerCase()
+    
+    // Entrées
+    if (nameLower.includes('salade') || 
+        nameLower.includes('soupe') || 
+        nameLower.includes('velouté') ||
+        nameLower.includes('entrée') ||
+        nameLower.includes('tartare') ||
+        nameLower.includes('carpaccio') ||
+        nameLower.includes('terrine') ||
+        nameLower.includes('bruschetta')) {
+      return 'entrée'
+    }
+    
+    // Desserts
+    if (nameLower.includes('dessert') || 
+        nameLower.includes('gâteau') || 
+        nameLower.includes('tarte') ||
+        nameLower.includes('mousse') ||
+        nameLower.includes('crème') ||
+        nameLower.includes('tiramisu') ||
+        nameLower.includes('fondant') ||
+        nameLower.includes('brownie') ||
+        nameLower.includes('cookie') ||
+        nameLower.includes('macaron') ||
+        nameLower.includes('éclair') ||
+        nameLower.includes('profiterole') ||
+        nameLower.includes('millefeuille') ||
+        nameLower.includes('cheese') && nameLower.includes('cake') ||
+        nameLower.includes('panna cotta') ||
+        nameLower.includes('île flottante')) {
+      return 'dessert'
+    }
+    
+    // Par défaut: plat
+    return 'plat'
+  }
+
+  // Filtrer et grouper les recettes
+  const getFilteredRecipes = () => {
+    let filtered = recipes.filter(recipe =>
+      recipe.name.toLowerCase().includes(search.toLowerCase()) ||
+      recipe.description?.toLowerCase().includes(search.toLowerCase())
+    )
+
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter(recipe => getCategoryFromName(recipe.name) === categoryFilter)
+    }
+
+    // Grouper par catégorie
+    const grouped = {
+      entrée: filtered.filter(r => getCategoryFromName(r.name) === 'entrée'),
+      plat: filtered.filter(r => getCategoryFromName(r.name) === 'plat'),
+      dessert: filtered.filter(r => getCategoryFromName(r.name) === 'dessert')
+    }
+
+    return grouped
+  }
+
+  const groupedRecipes = getFilteredRecipes()
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('fr-FR', {
@@ -453,6 +523,42 @@ export default function ConsommationsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Filtres par catégorie */}
+              <div className="flex gap-2 flex-wrap mb-6">
+                <Button
+                  variant={categoryFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCategoryFilter('all')}
+                  className={categoryFilter === 'all' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                >
+                  Toutes ({recipes.length})
+                </Button>
+                <Button
+                  variant={categoryFilter === 'entrée' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCategoryFilter('entrée')}
+                  className={categoryFilter === 'entrée' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                >
+                  🥗 Entrées ({groupedRecipes.entrée.length})
+                </Button>
+                <Button
+                  variant={categoryFilter === 'plat' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCategoryFilter('plat')}
+                  className={categoryFilter === 'plat' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                >
+                  🍽️ Plats ({groupedRecipes.plat.length})
+                </Button>
+                <Button
+                  variant={categoryFilter === 'dessert' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCategoryFilter('dessert')}
+                  className={categoryFilter === 'dessert' ? 'bg-orange-600 hover:bg-orange-700' : ''}
+                >
+                  🍰 Desserts ({groupedRecipes.dessert.length})
+                </Button>
+              </div>
+
               {loading ? (
                 <div className="text-center py-12">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
@@ -469,13 +575,20 @@ export default function ConsommationsPage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {recipes.map((recipe) => {
-                    const quantity = consumptions.get(recipe.id) || 0
-                    const isSelected = quantity > 0
+                <div className="space-y-8">
+                  {/* Entrées */}
+                  {groupedRecipes.entrée.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🥗 Entrées <span className="text-sm font-normal text-gray-500">({groupedRecipes.entrée.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.entrée.map((recipe) => {
+                          const quantity = consumptions.get(recipe.id) || 0
+                          const isSelected = quantity > 0
 
-                    return (
-                      <Card 
+                          return (
+                            <Card 
                         key={recipe.id} 
                         className={`transition-all ${
                           isSelected 
@@ -553,6 +666,197 @@ export default function ConsommationsPage() {
                       </Card>
                     )
                   })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Plats */}
+                  {groupedRecipes.plat.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🍽️ Plats <span className="text-sm font-normal text-gray-500">({groupedRecipes.plat.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.plat.map((recipe) => {
+                          const quantity = consumptions.get(recipe.id) || 0
+                          const isSelected = quantity > 0
+
+                          return (
+                            <Card 
+                              key={recipe.id} 
+                              className={`transition-all ${
+                                isSelected 
+                                  ? 'ring-2 ring-orange-500 shadow-lg bg-orange-50' 
+                                  : 'hover:shadow-lg'
+                              }`}
+                            >
+                              <CardHeader>
+                                <CardTitle className="text-lg">{recipe.name}</CardTitle>
+                                {recipe.description && (
+                                  <CardDescription className="line-clamp-2">
+                                    {recipe.description}
+                                  </CardDescription>
+                                )}
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-3">
+                                  <div className="space-y-1 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2">
+                                      <Package className="h-4 w-4" />
+                                      <span>{recipe.ingredient_count} ingrédient(s)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4" />
+                                      <span className="text-orange-600 font-medium">1 portion</span>
+                                    </div>
+                                    {(recipe.prep_time || recipe.cook_time) && (
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span className="text-xs">
+                                          {recipe.prep_time && `${formatTime(recipe.prep_time)}`}
+                                          {recipe.prep_time && recipe.cook_time && ' • '}
+                                          {recipe.cook_time && `${formatTime(recipe.cook_time)}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center justify-center gap-3 bg-white rounded-lg p-3 border-2 border-gray-200">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => decrementConsumption(recipe.id)}
+                                      disabled={quantity === 0}
+                                      className="h-10 w-10 rounded-full"
+                                    >
+                                      <Minus className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Input
+                                      type="text"
+                                      value={quantity}
+                                      onChange={(e) => setConsumptionValue(recipe.id, e.target.value)}
+                                      className="w-20 text-center text-xl font-bold border-0 focus:ring-2 focus:ring-orange-500"
+                                      placeholder="0"
+                                    />
+                                    
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => incrementConsumption(recipe.id)}
+                                      className="h-10 w-10 rounded-full bg-orange-600 text-white hover:bg-orange-700 hover:text-white"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+
+                                  {isSelected && (
+                                    <div className="text-center text-sm text-orange-600 font-medium">
+                                      ✓ {quantity} portion{quantity > 1 ? 's' : ''} sélectionnée{quantity > 1 ? 's' : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Desserts */}
+                  {groupedRecipes.dessert.length > 0 && (
+                    <div>
+                      <h3 className="text-xl font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                        🍰 Desserts <span className="text-sm font-normal text-gray-500">({groupedRecipes.dessert.length})</span>
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {groupedRecipes.dessert.map((recipe) => {
+                          const quantity = consumptions.get(recipe.id) || 0
+                          const isSelected = quantity > 0
+
+                          return (
+                            <Card 
+                              key={recipe.id} 
+                              className={`transition-all ${
+                                isSelected 
+                                  ? 'ring-2 ring-orange-500 shadow-lg bg-orange-50' 
+                                  : 'hover:shadow-lg'
+                              }`}
+                            >
+                              <CardHeader>
+                                <CardTitle className="text-lg">{recipe.name}</CardTitle>
+                                {recipe.description && (
+                                  <CardDescription className="line-clamp-2">
+                                    {recipe.description}
+                                  </CardDescription>
+                                )}
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-3">
+                                  <div className="space-y-1 text-sm text-gray-600">
+                                    <div className="flex items-center gap-2">
+                                      <Package className="h-4 w-4" />
+                                      <span>{recipe.ingredient_count} ingrédient(s)</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Users className="h-4 w-4" />
+                                      <span className="text-orange-600 font-medium">1 portion</span>
+                                    </div>
+                                    {(recipe.prep_time || recipe.cook_time) && (
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="h-4 w-4" />
+                                        <span className="text-xs">
+                                          {recipe.prep_time && `${formatTime(recipe.prep_time)}`}
+                                          {recipe.prep_time && recipe.cook_time && ' • '}
+                                          {recipe.cook_time && `${formatTime(recipe.cook_time)}`}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center justify-center gap-3 bg-white rounded-lg p-3 border-2 border-gray-200">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => decrementConsumption(recipe.id)}
+                                      disabled={quantity === 0}
+                                      className="h-10 w-10 rounded-full"
+                                    >
+                                      <Minus className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Input
+                                      type="text"
+                                      value={quantity}
+                                      onChange={(e) => setConsumptionValue(recipe.id, e.target.value)}
+                                      className="w-20 text-center text-xl font-bold border-0 focus:ring-2 focus:ring-orange-500"
+                                      placeholder="0"
+                                    />
+                                    
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => incrementConsumption(recipe.id)}
+                                      className="h-10 w-10 rounded-full bg-orange-600 text-white hover:bg-orange-700 hover:text-white"
+                                    >
+                                      <Plus className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+
+                                  {isSelected && (
+                                    <div className="text-center text-sm text-orange-600 font-medium">
+                                      ✓ {quantity} portion{quantity > 1 ? 's' : ''} sélectionnée{quantity > 1 ? 's' : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

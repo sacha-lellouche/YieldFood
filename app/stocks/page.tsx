@@ -53,7 +53,45 @@ export default function StocksPage() {
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set())
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null)
   const [tempCategory, setTempCategory] = useState<string>('')
+  const [editingUnitId, setEditingUnitId] = useState<string | null>(null)
+  const [tempUnit, setTempUnit] = useState<string>('')
   const [showConsumptionSummary, setShowConsumptionSummary] = useState(false)
+
+  // Catégories suggérées (ordonnées par pertinence)
+  const SUGGESTED_CATEGORIES = [
+    'Fruits & Légumes',
+    'Viandes & Volailles',
+    'Poissons & Fruits de mer',
+    'Produits laitiers',
+    'Épicerie salée / sucrée',
+    'Féculents & Pâtes',
+    'Boulangerie & Viennoiserie',
+    'Condiments & Sauces',
+    'Huiles & Vinaigres',
+    'Épices & Herbes',
+    'Boissons',
+    'Surgelés',
+    'Conserves',
+    'Autre'
+  ]
+
+  // Unités suggérées
+  const SUGGESTED_UNITS = [
+    'kg',
+    'g',
+    'L',
+    'mL',
+    'unité',
+    'pièce',
+    'botte',
+    'sachet',
+    'boîte',
+    'pot',
+    'bouteille',
+    'tranche',
+    'portion'
+  ]
+
   const [consumptionSummary, setConsumptionSummary] = useState<any>(null)
   const [loadingSummary, setLoadingSummary] = useState(false)
 
@@ -90,9 +128,15 @@ export default function StocksPage() {
       if (response.ok) {
         const data = await response.json()
         setConsumptionSummary(data)
-        // Afficher automatiquement le dialogue s'il y a des consommations
-        if (data.totalDishes > 0) {
+        // Afficher automatiquement le dialogue uniquement si on vient de déclarer des consommations
+        // (vérifié via un paramètre URL ou sessionStorage)
+        const urlParams = new URLSearchParams(window.location.search)
+        const fromConsumptions = urlParams.get('from') === 'consumptions' || sessionStorage.getItem('showConsumptionSummary') === 'true'
+        
+        if (data.totalDishes > 0 && fromConsumptions) {
           setShowConsumptionSummary(true)
+          // Nettoyer après affichage
+          sessionStorage.removeItem('showConsumptionSummary')
         }
       }
     } catch (error) {
@@ -304,6 +348,55 @@ export default function StocksPage() {
     setTempCategory('')
   }
 
+  const handleUnitEdit = (stock: StockWithProduct) => {
+    setEditingUnitId(stock.id)
+    setTempUnit(stock.product.unit)
+  }
+
+  const handleUnitChange = (value: string) => {
+    setTempUnit(value)
+  }
+
+  const handleUnitSave = async (stock: StockWithProduct) => {
+    if (!tempUnit.trim()) {
+      alert('L\'unité ne peut pas être vide')
+      return
+    }
+
+    try {
+      // Mise à jour du produit (pas du stock)
+      const response = await fetch(`/api/products/${stock.product_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          unit: tempUnit.trim()
+        }),
+      })
+
+      if (response.ok) {
+        // Mettre à jour localement
+        setStocks(stocks.map((s) =>
+          s.product_id === stock.product_id 
+            ? { ...s, product: { ...s.product, unit: tempUnit.trim() } } 
+            : s
+        ))
+        setEditingUnitId(null)
+        setTempUnit('')
+      } else {
+        const data = await response.json()
+        alert(`Erreur lors de la mise à jour de l'unité: ${data.error || 'Erreur inconnue'}`)
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur lors de la mise à jour de l\'unité')
+    }
+  }
+
+  const handleUnitCancel = () => {
+    setEditingUnitId(null)
+    setTempUnit('')
+  }
+
   const capitalizeCategory = (category: string | null) => {
     if (!category) return 'Non catégorisé'
     return category.charAt(0).toUpperCase() + category.slice(1)
@@ -376,6 +469,20 @@ export default function StocksPage() {
 
   // Obtenir les catégories uniques (en utilisant category_override ou product.category)
   const categories = Array.from(new Set(stocks.map(s => getEffectiveCategory(s)).filter(Boolean)))
+    .sort((a, b) => {
+      // Trier selon l'ordre des catégories suggérées
+      const indexA = SUGGESTED_CATEGORIES.indexOf(a)
+      const indexB = SUGGESTED_CATEGORIES.indexOf(b)
+      
+      // Si les deux sont dans les suggestions, utiliser cet ordre
+      if (indexA !== -1 && indexB !== -1) return indexA - indexB
+      // Si seulement A est dans les suggestions, A vient en premier
+      if (indexA !== -1) return -1
+      // Si seulement B est dans les suggestions, B vient en premier
+      if (indexB !== -1) return 1
+      // Sinon, ordre alphabétique
+      return a.localeCompare(b)
+    })
 
   // Filtrer et trier les stocks
   const filteredAndSortedStocks = stocks
@@ -744,19 +851,13 @@ export default function StocksPage() {
                                 {editingCategoryId === stock.id ? (
                                   <div className="flex items-center gap-2">
                                     <Select value={tempCategory} onValueChange={handleCategoryChange}>
-                                      <SelectTrigger className="w-[180px]">
+                                      <SelectTrigger className="w-[200px]">
                                         <SelectValue placeholder="Choisir une catégorie" />
                                       </SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="Légumes">Légumes</SelectItem>
-                                        <SelectItem value="Fruits">Fruits</SelectItem>
-                                        <SelectItem value="Viande & poisson">Viande & poisson</SelectItem>
-                                        <SelectItem value="Produits transformés">Produits transformés</SelectItem>
-                                        <SelectItem value="Produits laitiers">Produits laitiers</SelectItem>
-                                        <SelectItem value="Céréales & féculents">Céréales & féculents</SelectItem>
-                                        <SelectItem value="Épices & condiments">Épices & condiments</SelectItem>
-                                        <SelectItem value="Boissons">Boissons</SelectItem>
-                                        <SelectItem value="Autres">Autres</SelectItem>
+                                        {SUGGESTED_CATEGORIES.map(cat => (
+                                          <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                                        ))}
                                       </SelectContent>
                                     </Select>
                                     <Button
@@ -829,7 +930,49 @@ export default function StocksPage() {
                               </button>
                             )}
                           </TableCell>
-                          <TableCell>{stock.product.unit}</TableCell>
+                          <TableCell>
+                            {editingUnitId === stock.id ? (
+                              <div className="flex items-center gap-2">
+                                <Select
+                                  value={tempUnit}
+                                  onValueChange={handleUnitChange}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue placeholder="Unité" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {SUGGESTED_UNITS.map((unit) => (
+                                      <SelectItem key={unit} value={unit}>
+                                        {unit}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleUnitSave(stock)}
+                                  className="bg-green-600 hover:bg-green-700"
+                                >
+                                  ✓
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={handleUnitCancel}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => handleUnitEdit(stock)}
+                                className="font-medium hover:text-blue-600 transition-colors cursor-pointer"
+                                title="Cliquer pour modifier l'unité"
+                              >
+                                {stock.product.unit}
+                              </button>
+                            )}
+                          </TableCell>
                           <TableCell>
                             <span className={`font-medium ${status.color}`}>
                               {status.label}
